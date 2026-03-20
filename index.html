@@ -433,6 +433,8 @@ textarea.inp{resize:none}
       <div class="cam-zone" id="cam-zone">
         <video id="cam-video" autoplay playsinline muted></video>
         <img id="cam-img" alt="card">
+        <!-- Edge detection canvas — drawn over the video -->
+        <canvas id="edge-canvas" style="position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;border-radius:18px"></canvas>
         <div class="bracket tl"></div><div class="bracket tr"></div>
         <div class="bracket bl"></div><div class="bracket br"></div>
         <div class="scan-beam" id="scan-beam"></div>
@@ -450,6 +452,26 @@ textarea.inp{resize:none}
             touch-action:manipulation;display:flex;align-items:center;justify-content:center">
             📸
           </button>
+        </div>
+        <!-- Card alignment guide -->
+        <div id="align-guide" style="
+          position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+          z-index:3;pointer-events:none;
+          width:72%;height:85%;
+          border:2px dashed rgba(255,255,255,.25);
+          border-radius:8px;
+          display:flex;align-items:center;justify-content:center">
+          <div style="font-size:11px;color:rgba(255,255,255,.4);text-align:center;font-family:'Barlow Semi Condensed',sans-serif;letter-spacing:.5px">
+            Align card here
+          </div>
+        </div>
+        <!-- Edge quality indicator -->
+        <div id="edge-indicator" style="
+          position:absolute;top:10px;left:50%;transform:translateX(-50%);
+          z-index:5;padding:4px 12px;border-radius:20px;font-size:11px;
+          font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;
+          letter-spacing:.3px;display:none;
+          background:rgba(8,8,16,.7);border:1px solid var(--border)">
         </div>
       </div>
 
@@ -1088,28 +1110,45 @@ function updateEbayUI() {
 }
 
 // ════════════════════════════════════════════════════
-// CAMERA — auto-starts when scan tab opens
-// Captures frame → immediately auto-identifies
+// CAMERA — auto-starts, live edge detection overlay
 // ════════════════════════════════════════════════════
-let _cameraStream = null;
+let _cameraStream  = null;
+let _edgeTimer     = null;
+let _edgeScore     = 0;  // 0-100, how well a card is framed
 
 async function startCamera() {
   const video    = q('cam-video');
   const controls = q('cam-controls');
   const ui       = q('cam-ui');
+  const guide    = q('align-guide');
+  const indicator = q('edge-indicator');
   try {
     _cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
+      },
       audio: false,
     });
     video.srcObject = _cameraStream;
     await video.play().catch(() => {});
     ui.classList.add('hide');
-    q('scan-beam').style.display = 'block';
-    if (controls) controls.style.display = 'flex';
+    q('scan-beam').style.display = 'none'; // beam replaced by edge detection
+    if (controls)   controls.style.display  = 'flex';
+    if (guide)      guide.style.display     = 'flex';
+    if (indicator)  indicator.style.display = 'block';
     q('cam-zone').classList.add('live');
+
+    // Start edge detection loop
+    video.addEventListener('loadeddata', () => {
+      _edgeTimer = setInterval(() => detectCardEdges(), 200);
+    }, { once: true });
+    // Also start if already loaded
+    if (video.readyState >= 2) {
+      _edgeTimer = setInterval(() => detectCardEdges(), 200);
+    }
   } catch (err) {
-    // Camera permission denied — show message in the overlay
     ui.classList.remove('hide');
     ui.innerHTML = `
       <div style="font-size:32px">🚫</div>
@@ -1120,42 +1159,178 @@ async function startCamera() {
   }
 }
 
+// ── Edge detection using canvas sampling ────────────
+// Samples pixel brightness along the expected card border
+// region and detects contrast changes that indicate edges.
+function detectCardEdges() {
+  const video   = q('cam-video');
+  const canvas  = q('edge-canvas');
+  if (!video?.srcObject || !canvas) return;
+
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh) return;
+
+  // Use a small offscreen canvas for fast pixel sampling
+  const sampleCanvas = document.createElement('canvas');
+  const scale = 0.15; // sample at 15% size for performance
+  sampleCanvas.width  = Math.round(vw * scale);
+  sampleCanvas.height = Math.round(vh * scale);
+  const sCtx = sampleCanvas.getContext('2d');
+  sCtx.drawImage(video, 0, 0, sampleCanvas.width, sampleCanvas.height);
+  const imageData = sCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height);
+  const pixels    = imageData.data;
+  const sw = sampleCanvas.width;
+  const sh = sampleCanvas.height;
+
+  // Expected card region: center 70% width, 80% height
+  const cx1 = Math.floor(sw * 0.15);
+  const cx2 = Math.floor(sw * 0.85);
+  const cy1 = Math.floor(sh * 0.10);
+  const cy2 = Math.floor(sh * 0.90);
+
+  // Sample brightness along the four expected card edges
+  let edgeStrength = 0;
+  const sampleCount = 20;
+
+  // Top edge
+  for (let i = 0; i < sampleCount; i++) {
+    const x = cx1 + Math.floor((cx2 - cx1) * i / sampleCount);
+    edgeStrength += getEdgeAt(pixels, sw, x, cy1);
+  }
+  // Bottom edge
+  for (let i = 0; i < sampleCount; i++) {
+    const x = cx1 + Math.floor((cx2 - cx1) * i / sampleCount);
+    edgeStrength += getEdgeAt(pixels, sw, x, cy2);
+  }
+  // Left edge
+  for (let i = 0; i < sampleCount; i++) {
+    const y = cy1 + Math.floor((cy2 - cy1) * i / sampleCount);
+    edgeStrength += getEdgeAt(pixels, sw, cx1, y);
+  }
+  // Right edge
+  for (let i = 0; i < sampleCount; i++) {
+    const y = cy1 + Math.floor((cy2 - cy1) * i / sampleCount);
+    edgeStrength += getEdgeAt(pixels, sw, cx2, y);
+  }
+
+  const avgEdge = edgeStrength / (sampleCount * 4);
+  // Smooth the score to avoid flickering
+  _edgeScore = _edgeScore * 0.7 + avgEdge * 100 * 0.3;
+
+  // Draw overlay on the display canvas
+  drawEdgeOverlay(canvas, video, _edgeScore);
+  updateEdgeIndicator(_edgeScore);
+}
+
+function getEdgeAt(pixels, width, x, y) {
+  // Compare brightness of pixel vs neighbour — high difference = edge
+  const idx  = (y * width + x) * 4;
+  const idxN = ((y - 1) * width + x) * 4;
+  if (idx < 0 || idxN < 0 || idx >= pixels.length) return 0;
+  const brightness  = (pixels[idx] + pixels[idx+1] + pixels[idx+2]) / 3;
+  const brightnessN = (pixels[idxN] + pixels[idxN+1] + pixels[idxN+2]) / 3;
+  return Math.min(Math.abs(brightness - brightnessN) / 255, 1);
+}
+
+function drawEdgeOverlay(canvas, video, score) {
+  // Size canvas to match display size
+  const rect = canvas.getBoundingClientRect();
+  canvas.width  = rect.width  || canvas.offsetWidth;
+  canvas.height = rect.height || canvas.offsetHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Color: red (no card) → yellow (partial) → green (good)
+  const r = score < 40 ? 255 : score < 70 ? 255 : 40;
+  const g = score < 40 ? 80  : score < 70 ? 200 : 220;
+  const b = 40;
+  const alpha = 0.6 + (score / 100) * 0.3;
+  const color = `rgba(${r},${g},${b},${alpha})`;
+
+  // Draw corner brackets that grow/shrink based on score
+  const cx = canvas.width  * 0.15;
+  const cy = canvas.height * 0.08;
+  const cw = canvas.width  * 0.70;
+  const ch = canvas.height * 0.84;
+  const bracketLen = 28 + score * 0.18;
+  const lw = 2 + (score / 100) * 1.5;
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = lw;
+  ctx.lineCap     = 'round';
+
+  // Top-left
+  ctx.beginPath(); ctx.moveTo(cx, cy + bracketLen); ctx.lineTo(cx, cy); ctx.lineTo(cx + bracketLen, cy); ctx.stroke();
+  // Top-right
+  ctx.beginPath(); ctx.moveTo(cx + cw - bracketLen, cy); ctx.lineTo(cx + cw, cy); ctx.lineTo(cx + cw, cy + bracketLen); ctx.stroke();
+  // Bottom-left
+  ctx.beginPath(); ctx.moveTo(cx, cy + ch - bracketLen); ctx.lineTo(cx, cy + ch); ctx.lineTo(cx + bracketLen, cy + ch); ctx.stroke();
+  // Bottom-right
+  ctx.beginPath(); ctx.moveTo(cx + cw - bracketLen, cy + ch); ctx.lineTo(cx + cw, cy + ch); ctx.lineTo(cx + cw, cy + ch - bracketLen); ctx.stroke();
+
+  // When score is high, draw a subtle fill to show "locked on"
+  if (score > 65) {
+    ctx.fillStyle = `rgba(${r},${g},${b},0.04)`;
+    ctx.fillRect(cx, cy, cw, ch);
+  }
+}
+
+function updateEdgeIndicator(score) {
+  const el = q('edge-indicator');
+  if (!el) return;
+  if (score < 25) {
+    el.textContent   = '🔍 No card detected';
+    el.style.color   = '#ff8888';
+    el.style.borderColor = 'rgba(255,100,100,.3)';
+  } else if (score < 55) {
+    el.textContent   = '📐 Align card to frame';
+    el.style.color   = '#f0b429';
+    el.style.borderColor = 'rgba(240,180,41,.3)';
+  } else if (score < 75) {
+    el.textContent   = '✅ Almost — hold steady';
+    el.style.color   = '#7dd3a8';
+    el.style.borderColor = 'rgba(100,200,140,.3)';
+  } else {
+    el.textContent   = '✅ Card detected — tap 📸';
+    el.style.color   = '#10d98a';
+    el.style.borderColor = 'rgba(16,217,138,.35)';
+  }
+}
+
 function captureFrame() {
   const video = q('cam-video');
   if (!video.srcObject) return;
-
-  // Draw current frame to canvas
   const canvas  = document.createElement('canvas');
   canvas.width  = video.videoWidth  || 640;
   canvas.height = video.videoHeight || 480;
   canvas.getContext('2d').drawImage(video, 0, 0);
-
   canvas.toBlob(blob => {
     if (!blob) { toast('Could not capture frame', 'err'); return; }
-
-    // Show the captured frame
-    const url = URL.createObjectURL(blob);
-    S._imageFile = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
-    S.cardImgSrc = url;
-    showCamPreview(url);
-
-    // Stop camera stream
+    S._imageFile  = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
+    S.cardImgSrc  = URL.createObjectURL(blob);
+    showCamPreview(S.cardImgSrc);
     stopCameraStream();
-
-    // Auto-identify immediately — no button needed
     identifyCard();
-  }, 'image/jpeg', 0.92);
+  }, 'image/jpeg', 0.95);
 }
 
 function stopCameraStream() {
+  clearInterval(_edgeTimer);
+  _edgeTimer = null;
+  _edgeScore = 0;
   if (_cameraStream) {
     _cameraStream.getTracks().forEach(t => t.stop());
     _cameraStream = null;
   }
   const video    = q('cam-video');
+  const edgeCv   = q('edge-canvas');
   const controls = q('cam-controls');
+  const indicator = q('edge-indicator');
   video.srcObject = null;
-  if (controls) controls.style.display = 'none';
+  if (edgeCv)    { const ctx = edgeCv.getContext('2d'); ctx?.clearRect(0, 0, edgeCv.width, edgeCv.height); }
+  if (controls)  controls.style.display  = 'none';
+  if (indicator) indicator.style.display = 'none';
 }
 
 function showCamPreview(src) {
@@ -1164,18 +1339,21 @@ function showCamPreview(src) {
   q('cam-ui').classList.add('hide');
   q('scan-beam').style.display = 'none';
   q('cam-zone').classList.add('live');
+  const guide = q('align-guide');
+  if (guide) guide.style.display = 'none';
 }
 
 function retryCamera() {
-  // Reset scan UI and restart camera
   const img = q('cam-img');
   img.src = ''; img.style.display = 'none';
   q('scan-loading').style.display = 'none';
   q('scan-retry').style.display   = 'none';
   q('cam-zone').classList.remove('live');
-  q('cam-ui').classList.remove('hide');
-  q('cam-ui').innerHTML = `<div class="cam-ui-icon">📷</div><div class="cam-ui-hint">Starting camera…</div>`;
-  q('scan-beam').style.display = 'block';
+  const ui = q('cam-ui');
+  ui.classList.remove('hide');
+  ui.innerHTML = '<div class="cam-ui-icon">📷</div><div class="cam-ui-hint">Starting camera…</div>';
+  const guide = q('align-guide');
+  if (guide) { guide.style.display = 'flex'; }
   S._imageFile = null; S.cardImgSrc = null;
   startCamera();
 }
@@ -1256,25 +1434,34 @@ async function fetchSuggestions(query) {
       return;
     }
     window._searchResults = cards;
-    sugEl.innerHTML = cards.map((c, i) => `
-      <div onclick="selectCard(${i})" style="
-        display:flex;align-items:center;gap:10px;
-        padding:10px 14px;cursor:pointer;
-        border-bottom:1px solid var(--border);
-        transition:background .1s;
-      " ontouchstart="this.style.background='var(--s2)'"
-         ontouchend="this.style.background=''">
-        <img src="${c.image ? c.image+'/low.webp' : ''}"
-          style="width:32px;height:44px;object-fit:contain;border-radius:4px;background:var(--s2);flex-shrink:0"
-          onerror="this.style.display='none'">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
-          <div style="font-size:11px;color:var(--sub)">${c.set?.name || ''} · #${c.localId || ''}${c.rarity ? ' · ' + c.rarity : ''}</div>
-        </div>
-        <div style="font-size:11px;color:var(--muted);flex-shrink:0">→</div>
-      </div>`).join('');
+    sugEl.innerHTML = '';
+    cards.forEach((c, i) => {
+      const row  = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);touch-action:manipulation';
+      row.ontouchstart = () => row.style.background = 'var(--s2)';
+      row.ontouchend   = () => row.style.background = '';
+      row.onclick      = () => selectCard(i);
+      const img = document.createElement('img');
+      img.src = c.image ? c.image + '/low.webp' : '';
+      img.style.cssText = 'width:32px;height:44px;object-fit:contain;border-radius:4px;background:var(--s2);flex-shrink:0';
+      img.onerror = () => img.style.display = 'none';
+      const info = document.createElement('div');
+      info.style.cssText = 'flex:1;min-width:0';
+      const nameEl = document.createElement('div');
+      nameEl.style.cssText = 'font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      nameEl.textContent = c.name;
+      const metaEl = document.createElement('div');
+      metaEl.style.cssText = 'font-size:11px;color:var(--sub)';
+      metaEl.textContent = [c.set?.name, c.localId ? '#'+c.localId : '', c.rarity].filter(Boolean).join(' · ');
+      const arrow = document.createElement('div');
+      arrow.style.cssText = 'font-size:11px;color:var(--muted);flex-shrink:0';
+      arrow.textContent = '→';
+      info.append(nameEl, metaEl);
+      row.append(img, info, arrow);
+      sugEl.appendChild(row);
+    });
   } catch(e) {
-    sugEl.innerHTML = `<div style="padding:12px 14px;color:var(--red);font-size:13px">${e.message}</div>`;
+    sugEl.innerHTML = '<div style="padding:12px 14px;color:var(--red);font-size:13px">' + e.message + '</div>';
   }
 }
 
@@ -1289,31 +1476,48 @@ async function doSearch() {
   try {
     const cards = await tcgdexSearch(val, 20);
     window._searchResults = cards;
+    resultsEl.innerHTML = '';
     if (!cards.length) {
       resultsEl.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:10px 0;text-align:center">No cards found. Try a different name.</div>';
       return;
     }
-    resultsEl.innerHTML = `
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-family:'Barlow Semi Condensed',sans-serif">${cards.length} results for "${val}"</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        ${cards.map((c, i) => `
-          <div onclick="selectCard(${i})" style="
-            background:var(--s1);border:1px solid var(--border);border-radius:12px;
-            overflow:hidden;cursor:pointer;touch-action:manipulation">
-            <div style="background:var(--s2);padding:10px;display:flex;align-items:center;justify-content:center;height:100px">
-              <img src="${c.image ? c.image+'/low.webp' : ''}"
-                style="max-height:90px;max-width:100%;object-fit:contain;border-radius:4px"
-                onerror="this.style.opacity='.3'">
-            </div>
-            <div style="padding:8px">
-              <div style="font-size:13px;font-weight:700;font-family:'Barlow Condensed',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
-              <div style="font-size:10px;color:var(--sub);margin-top:2px">${c.set?.name || ''}</div>
-              <div style="font-size:10px;color:var(--muted)">#${c.localId || ''}${c.rarity ? ' · ' + c.rarity : ''}</div>
-            </div>
-          </div>`).join('')}
-      </div>`;
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:12px;color:var(--muted);margin-bottom:8px';
+    label.textContent = cards.length + ' results for "' + val + '"';
+    resultsEl.appendChild(label);
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px';
+    cards.forEach((c, i) => {
+      const tile = document.createElement('div');
+      tile.style.cssText = 'background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;touch-action:manipulation';
+      tile.ontouchstart = () => tile.style.borderColor = 'var(--gold)';
+      tile.ontouchend   = () => tile.style.borderColor = 'var(--border)';
+      tile.onclick      = () => selectCard(i);
+      const imgWrap = document.createElement('div');
+      imgWrap.style.cssText = 'background:var(--s2);padding:10px;display:flex;align-items:center;justify-content:center;height:100px';
+      const img = document.createElement('img');
+      img.src = c.image ? c.image + '/low.webp' : '';
+      img.style.cssText = 'max-height:90px;max-width:100%;object-fit:contain;border-radius:4px';
+      img.onerror = () => img.style.opacity = '0.2';
+      imgWrap.appendChild(img);
+      const body = document.createElement('div');
+      body.style.cssText = 'padding:8px';
+      const nameEl = document.createElement('div');
+      nameEl.style.cssText = 'font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      nameEl.textContent = c.name;
+      const setEl = document.createElement('div');
+      setEl.style.cssText = 'font-size:10px;color:var(--sub);margin-top:2px';
+      setEl.textContent = c.set?.name || '';
+      const numEl = document.createElement('div');
+      numEl.style.cssText = 'font-size:10px;color:var(--muted)';
+      numEl.textContent = [c.localId ? '#'+c.localId : '', c.rarity].filter(Boolean).join(' · ');
+      body.append(nameEl, setEl, numEl);
+      tile.append(imgWrap, body);
+      grid.appendChild(tile);
+    });
+    resultsEl.appendChild(grid);
   } catch(e) {
-    resultsEl.innerHTML = `<div style="color:var(--red);font-size:13px;padding:10px 0">${e.message}</div>`;
+    resultsEl.innerHTML = '<div style="color:var(--red);font-size:13px;padding:10px 0">' + e.message + '</div>';
   }
 }
 
