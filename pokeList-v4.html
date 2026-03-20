@@ -1,0 +1,1592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#080810">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PokeList</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@300;400;500;600&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#080810; --s1:#0e0e1c; --s2:#151528; --s3:#1d1d38; --s4:#252545;
+  --border:#2a2a50; --border2:#383868;
+  --text:#f0f0fa; --sub:#8888b0; --muted:#4a4a78;
+  --gold:#f0b429; --gold2:#ffd166; --red:#ff4560;
+  --blue:#3d82f6; --green:#10d98a; --ebay:#0064d2;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{font-size:16px;height:100%;overflow:hidden}
+body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);height:100%;overflow:hidden;-webkit-font-smoothing:antialiased;touch-action:pan-y}
+img{display:block}
+input,textarea,button{font-family:'Barlow',sans-serif}
+button{cursor:pointer;border:none;background:none}
+
+/* ── APP SHELL ── */
+#app{width:100%;height:100%;max-width:430px;margin:0 auto;display:flex;flex-direction:column;position:relative;overflow:hidden;background:var(--bg)}
+
+/* ── PAGES ── */
+.page{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);transition:transform .3s cubic-bezier(.4,0,.2,1),opacity .3s;will-change:transform,opacity;overflow:hidden}
+.page.hidden{transform:translateX(100%);opacity:0;pointer-events:none}
+.page.active{transform:translateX(0);opacity:1}
+
+/* ── WAKE SCREEN ── */
+#pg-wake{align-items:center;justify-content:center;gap:16px;background:var(--bg)}
+.wake-spinner{width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+.wake-msg{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--sub);letter-spacing:.5px}
+.wake-sub{font-size:13px;color:var(--muted);text-align:center;max-width:220px;line-height:1.5}
+
+/* ── SCROLL ── */
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:16px 16px 0;display:flex;flex-direction:column;gap:14px}
+.scroll::-webkit-scrollbar{display:none}
+
+/* ── HEADER ── */
+.hdr{flex-shrink:0;padding:calc(12px + var(--safe-top)) 16px 12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);background:var(--bg);position:relative;z-index:10}
+.hdr-back{width:38px;height:38px;border-radius:12px;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:var(--text);transition:background .15s}
+.hdr-back:active{background:var(--s3)}
+.hdr-title{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;flex:1;letter-spacing:.3px}
+.logo{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:28px;letter-spacing:-0.5px;line-height:1}
+.logo .pk{color:var(--gold)}.logo .li{color:var(--text)}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.hdr-badge{font-family:'Barlow Semi Condensed',sans-serif;font-size:10px;background:var(--s2);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:20px;letter-spacing:.5px;font-weight:600}
+.avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--red));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#080810;border:2px solid var(--border2);flex-shrink:0;font-family:'Barlow Condensed',sans-serif;overflow:hidden}
+.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+
+/* ── NAV ── */
+.nav{flex-shrink:0;display:flex;background:var(--s1);border-top:1px solid var(--border);padding-bottom:var(--safe-bot)}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px 11px;gap:3px;color:var(--muted);transition:color .15s;min-height:56px}
+.nav-btn.active{color:var(--gold)}
+.nav-btn:active{opacity:.7}
+.nav-icon{font-size:22px;line-height:1}
+.nav-lbl{font-family:'Barlow Semi Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:.3px}
+
+/* ── BUTTONS ── */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 20px;border-radius:14px;border:none;font-family:'Barlow Semi Condensed',sans-serif;font-size:16px;font-weight:600;letter-spacing:.2px;width:100%;transition:all .15s;cursor:pointer}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+.btn-gold{background:var(--gold);color:#080810}
+.btn-gold:active{background:var(--gold2)}
+.btn-ghost{background:var(--s2);color:var(--text);border:1px solid var(--border)}
+.btn-ghost:active{background:var(--s3)}
+.btn-ebay{background:var(--ebay);color:#fff}
+.btn-ebay:active{background:#0052ab}
+.btn-red{background:rgba(255,69,96,.1);color:var(--red);border:1px solid rgba(255,69,96,.2)}
+.btn-google{background:#fff;color:#1f1f1f;border:1px solid #ddd;font-size:15px}
+.btn-sm{padding:9px 14px;font-size:14px;width:auto;border-radius:10px}
+.btn-row{display:flex;gap:8px}
+.btn-row .btn{flex:1}
+
+/* ── INPUTS ── */
+.inp{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:13px 14px;color:var(--text);font-size:15px;font-family:'Barlow',sans-serif;outline:none;transition:border-color .15s;-webkit-appearance:none;appearance:none}
+.inp:focus{border-color:var(--gold)}
+.inp::placeholder{color:var(--muted)}
+textarea.inp{resize:none}
+.inp-err{font-size:12px;color:var(--red);display:none;margin-top:2px}
+.inp-err.show{display:block}
+
+/* ── SPINNER ── */
+.spin-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 0}
+.spinner{width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .65s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin-lbl{font-size:13px;color:var(--sub);font-family:'Barlow Semi Condensed',sans-serif;letter-spacing:.3px}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:calc(72px + var(--safe-bot));left:50%;transform:translateX(-50%) translateY(12px);background:var(--s3);border:1px solid var(--border2);color:var(--text);padding:11px 18px;border-radius:12px;font-size:14px;opacity:0;transition:all .25s;z-index:999;white-space:nowrap;pointer-events:none;max-width:90vw;text-align:center;font-family:'Barlow Semi Condensed',sans-serif;letter-spacing:.2px}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.err{border-color:rgba(255,69,96,.4);color:var(--red)}
+#toast.ok{border-color:rgba(16,217,138,.4);color:var(--green)}
+
+/* ── MODAL ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(2px)}
+.modal-bg.show{display:flex}
+.modal{background:var(--s1);width:100%;max-width:430px;border-radius:24px 24px 0 0;border-top:1px solid var(--border2);padding:0 20px calc(24px + var(--safe-bot));animation:slideUp .3s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;gap:14px;max-height:90vh;overflow-y:auto}
+.modal::-webkit-scrollbar{display:none}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.modal-handle{width:40px;height:4px;background:var(--border2);border-radius:2px;align-self:center;margin:14px 0 6px;flex-shrink:0}
+.modal-title{font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;letter-spacing:.3px}
+.modal-sub{font-size:14px;color:var(--sub);line-height:1.55;margin-top:-4px}
+
+/* ── SURFACES ── */
+.surface{background:var(--s1);border:1px solid var(--border);border-radius:18px;overflow:hidden}
+.sec-lbl{font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:10px}
+.pill-row{display:flex;gap:6px;flex-wrap:wrap}
+.pill{padding:8px 13px;border-radius:10px;border:1px solid var(--border);background:var(--s1);color:var(--sub);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;user-select:none}
+.pill:active{transform:scale(.95)}
+.pill.on{background:var(--gold);color:#080810;border-color:var(--gold);font-weight:700}
+.bbar{flex-shrink:0;padding:12px 16px calc(14px + var(--safe-bot));border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.spacer{height:16px;flex-shrink:0}
+.disclaimer{background:rgba(61,130,246,.07);border:1px solid rgba(61,130,246,.18);border-radius:12px;padding:12px;font-size:12px;color:var(--sub);line-height:1.5}
+.disclaimer strong{color:var(--blue)}
+
+/* ── AUTH ── */
+#pg-auth{background:var(--bg)}
+.auth-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;overflow-y:auto;padding-top:calc(32px + var(--safe-top))}
+.auth-ball-ring{width:120px;height:120px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;margin-bottom:28px;animation:rotate 10s linear infinite}
+@keyframes rotate{to{transform:rotate(360deg)}}
+.auth-ball-ring::before{content:'';position:absolute;width:12px;height:12px;border-radius:50%;background:var(--gold);top:-6px;left:50%;transform:translateX(-50%);box-shadow:0 0 16px var(--gold)}
+.auth-ball-inner{width:88px;height:88px;border-radius:50%;background:conic-gradient(var(--gold) 0 180deg,var(--s3) 180deg 360deg);display:flex;align-items:center;justify-content:center;animation:rotate 10s linear infinite reverse}
+.auth-ball-center{width:44px;height:44px;border-radius:50%;background:var(--bg);border:3px solid var(--s4);display:flex;align-items:center;justify-content:center;font-size:18px}
+.auth-title{font-family:'Barlow Condensed',sans-serif;font-size:38px;font-weight:800;text-align:center;line-height:1;letter-spacing:-1px;margin-bottom:10px}
+.auth-title span{color:var(--gold)}
+.auth-sub{font-size:14px;color:var(--sub);text-align:center;line-height:1.6;margin-bottom:28px;max-width:270px}
+.auth-form{width:100%;display:flex;flex-direction:column;gap:11px}
+.auth-div{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;font-family:'Barlow Semi Condensed',sans-serif;letter-spacing:.5px}
+.auth-div::before,.auth-div::after{content:'';flex:1;height:1px;background:var(--border)}
+.auth-footer{text-align:center;font-size:14px;color:var(--sub);padding:4px 0}
+.auth-footer b{color:var(--gold);cursor:pointer;font-weight:600}
+.g-signin-wrap{width:100%;display:flex;justify-content:center;min-height:44px}
+
+/* ── HOME ── */
+.user-card{display:flex;align-items:center;gap:12px;background:var(--s1);border:1px solid var(--border);border-radius:16px;padding:14px}
+.user-card-av{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--red));display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:#080810;flex-shrink:0;overflow:hidden}
+.user-card-av img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.user-card-name{font-size:15px;font-weight:600;line-height:1.2}
+.user-card-email{font-size:12px;color:var(--sub)}
+.online-badge{margin-left:auto;font-size:11px;background:rgba(16,217,138,.1);color:var(--green);border:1px solid rgba(16,217,138,.2);padding:3px 9px;border-radius:8px;font-family:'Barlow Semi Condensed',sans-serif;font-weight:600}
+.ebay-tile{background:linear-gradient(135deg,rgba(0,100,210,.18),rgba(0,100,210,.06));border:1px solid rgba(0,100,210,.35);border-radius:18px;padding:16px}
+.ebay-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.ebay-wordmark{font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:800}
+.ebay-wordmark .e{color:#e53238}.ebay-wordmark .b{color:#f90013}.ebay-wordmark .a{color:#0064d2}.ebay-wordmark .y{color:#f5af02}
+.ebay-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.ebay-dot.on{background:var(--green);box-shadow:0 0 6px rgba(16,217,138,.5)}
+.ebay-status-txt{font-size:13px;color:var(--sub)}
+.ebay-seller-box{background:rgba(0,0,0,.25);border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.ebay-feedback{font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:var(--gold);letter-spacing:.5px}
+.stats-row{display:flex;gap:8px}
+.stat-box{flex:1;background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:13px}
+.stat-num{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;line-height:1;letter-spacing:-0.5px}
+.stat-lbl{font-size:12px;color:var(--sub);margin-top:2px}
+.recent-card{display:flex;align-items:center;gap:10px;background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:10px 12px;cursor:pointer;transition:border-color .15s}
+.recent-card:active{background:var(--s2)}
+.recent-thumb{width:38px;height:52px;border-radius:6px;object-fit:contain;background:var(--s2);flex-shrink:0}
+.recent-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent-meta{font-size:12px;color:var(--sub)}
+.recent-price{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;color:var(--gold);flex-shrink:0}
+.lbadge{font-size:10px;padding:2px 7px;border-radius:5px;font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;flex-shrink:0}
+.lbadge-live{background:rgba(61,130,246,.12);color:var(--blue);border:1px solid rgba(61,130,246,.25)}
+.lbadge-sold{background:rgba(16,217,138,.1);color:var(--green);border:1px solid rgba(16,217,138,.2)}
+.lbadge-draft{background:var(--s3);color:var(--muted);border:1px solid var(--border)}
+
+/* ── SCAN ── */
+.cam-zone{position:relative;border-radius:20px;overflow:hidden;background:var(--s1);border:2px dashed var(--border);aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:border-color .2s;flex-shrink:0}
+.cam-zone.live{border-style:solid;border-color:var(--gold)}
+#cam-video,#cam-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:18px}
+#cam-img{display:none;object-fit:contain;background:var(--s2);padding:8px}
+.cam-ui{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(8,8,16,.5);transition:opacity .3s}
+.cam-ui.hide{opacity:0;pointer-events:none}
+.cam-ui-icon{font-size:48px}
+.cam-ui-hint{font-size:13px;color:var(--sub);text-align:center;line-height:1.5}
+.bracket{position:absolute;width:50px;height:50px;z-index:3}
+.tl{top:14px;left:14px;border-top:2px solid var(--gold);border-left:2px solid var(--gold);border-radius:4px 0 0 0}
+.tr{top:14px;right:14px;border-top:2px solid var(--gold);border-right:2px solid var(--gold);border-radius:0 4px 0 0}
+.bl{bottom:14px;left:14px;border-bottom:2px solid var(--gold);border-left:2px solid var(--gold);border-radius:0 0 0 4px}
+.br{bottom:14px;right:14px;border-bottom:2px solid var(--gold);border-right:2px solid var(--gold);border-radius:0 0 4px 0}
+.scan-beam{position:absolute;left:14px;right:14px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);z-index:3;box-shadow:0 0 10px var(--gold);animation:beam 2.2s ease-in-out infinite}
+@keyframes beam{0%,100%{top:14px}50%{top:calc(100% - 14px)}}
+#file-in{display:none}
+.search-row{display:flex;gap:8px}
+.search-row .inp{flex:1}
+
+/* ── RESULT ── */
+.card-hero{border-radius:18px;overflow:hidden;background:var(--s1);border:1px solid var(--border)}
+.card-img-zone{background:linear-gradient(160deg,var(--s2),var(--s1));display:flex;align-items:center;justify-content:center;padding:20px;min-height:220px;position:relative}
+.card-img{max-height:260px;max-width:100%;object-fit:contain;border-radius:10px;box-shadow:0 24px 64px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.04);transition:transform .3s}
+.card-img:active{transform:scale(1.04)}
+.card-rarity-tag{position:absolute;top:12px;right:12px;font-family:'Barlow Semi Condensed',sans-serif;font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;border:1px solid rgba(240,180,41,.4);background:rgba(8,8,16,.85);color:var(--gold);letter-spacing:.3px}
+.card-info{padding:14px 16px 16px}
+.card-name{font-family:'Barlow Condensed',sans-serif;font-size:34px;font-weight:800;letter-spacing:-0.5px;line-height:1;margin-bottom:8px}
+.pill-tags{display:flex;gap:5px;flex-wrap:wrap}
+.ptag{font-size:11px;font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;padding:4px 9px;border-radius:6px;background:var(--s2);color:var(--sub);border:1px solid var(--border);letter-spacing:.2px}
+.ptag.hi{color:var(--gold);border-color:rgba(240,180,41,.3)}
+.price-block{background:var(--s1);border:1px solid var(--border);border-radius:18px;padding:16px}
+.price-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px}
+.price-lbl{font-size:13px;color:var(--sub)}
+.price-src{font-size:11px;color:var(--muted);font-family:'Barlow Semi Condensed',sans-serif;letter-spacing:.3px}
+.price-big{font-family:'Barlow Condensed',sans-serif;font-size:58px;font-weight:800;color:var(--gold);line-height:1;letter-spacing:-2px;margin:4px 0 8px}
+.price-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.price-cell{background:var(--s2);border-radius:10px;padding:10px 11px;border:1px solid var(--border)}
+.price-cell-lbl{font-size:11px;color:var(--muted);margin-bottom:3px;font-family:'Barlow Semi Condensed',sans-serif;letter-spacing:.3px}
+.price-cell-val{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700}
+.trend-up{color:var(--green)}.trend-dn{color:var(--red)}
+.price-unavail{font-size:13px;color:var(--muted);text-align:center;padding:12px 0}
+
+/* ── LISTING ── */
+.listing-surface{background:var(--s1);border:1px solid var(--border);border-radius:18px;overflow:hidden}
+.listing-top{background:var(--ebay);padding:14px 18px;display:flex;align-items:center;justify-content:space-between}
+.listing-top-logo{font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:800;color:#fff;letter-spacing:-0.5px}
+.listing-top-sub{font-size:13px;color:rgba(255,255,255,.75)}
+.listing-img-preview{display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--s2);border-bottom:1px solid var(--border)}
+.listing-preview-img{width:52px;height:72px;border-radius:8px;object-fit:contain;background:var(--s1);flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+.listing-preview-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.listing-preview-meta{font-size:12px;color:var(--sub);margin-top:2px}
+.listing-preview-price{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:var(--gold)}
+.l-body{padding:16px;display:flex;flex-direction:column;gap:13px}
+.l-field{display:flex;flex-direction:column;gap:5px}
+.l-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-family:'Barlow Semi Condensed',sans-serif;font-weight:600}
+.l-val{font-size:14px;color:var(--text);line-height:1.4}
+.l-val.big-price{font-family:'Barlow Condensed',sans-serif;font-size:30px;font-weight:800;color:var(--gold);letter-spacing:-0.5px}
+.l-divider{height:1px;background:var(--border)}
+.l-tags{display:flex;gap:5px;flex-wrap:wrap}
+.l-tag{font-size:11px;background:var(--s2);color:var(--sub);padding:3px 8px;border-radius:5px;border:1px solid var(--border)}
+.markup-row{display:flex;align-items:center;gap:10px}
+.markup-row label{font-size:13px;color:var(--sub);flex:1}
+.markup-inp{width:80px;text-align:center;padding:8px 10px;font-size:14px}
+.success-box{background:rgba(16,217,138,.06);border:1px solid rgba(16,217,138,.2);border-radius:16px;padding:20px;text-align:center;display:none;flex-direction:column;align-items:center;gap:8px}
+.success-box.show{display:flex;animation:popIn .4s cubic-bezier(.34,1.56,.64,1)}
+@keyframes popIn{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+.success-icon-big{font-size:42px}
+.success-title{font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:800;color:var(--green)}
+.success-sub{font-size:13px;color:var(--sub)}
+.success-id{font-size:11px;color:var(--muted);font-family:'Barlow Semi Condensed',sans-serif;margin-top:4px}
+
+/* ── COLLECTION ── */
+.collection-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.coll-card{background:var(--s1);border:1px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s;position:relative}
+.coll-card:active{transform:scale(.97);border-color:var(--border2)}
+.coll-card-img-wrap{background:linear-gradient(160deg,var(--s2),var(--s1));padding:12px;display:flex;align-items:center;justify-content:center;aspect-ratio:3/4}
+.coll-card-img{max-width:100%;max-height:140px;object-fit:contain;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.coll-card-body{padding:10px}
+.coll-card-name{font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.coll-card-set{font-size:11px;color:var(--sub);margin-top:2px}
+.coll-card-price{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;color:var(--gold);margin-top:4px}
+.coll-card-cond{position:absolute;top:8px;left:8px;font-size:10px;font-family:'Barlow Semi Condensed',sans-serif;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(8,8,16,.8);border:1px solid var(--border);color:var(--sub)}
+.coll-empty{grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--muted);font-size:14px;line-height:1.6}
+.coll-empty-icon{font-size:40px;margin-bottom:10px}
+
+/* ── PORTFOLIO ── */
+.port-hero{background:linear-gradient(135deg,rgba(240,180,41,.12),rgba(240,180,41,.03));border:1px solid rgba(240,180,41,.2);border-radius:20px;padding:20px}
+.port-hero-lbl{font-size:13px;color:var(--sub);margin-bottom:4px}
+.port-total{font-family:'Barlow Condensed',sans-serif;font-size:52px;font-weight:800;color:var(--gold);letter-spacing:-2px;line-height:1}
+.port-change{font-size:14px;font-weight:600;margin-top:4px;font-family:'Barlow Semi Condensed',sans-serif}
+.port-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.port-stat{background:rgba(0,0,0,.25);border-radius:12px;padding:12px}
+.port-stat-num{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;line-height:1}
+.port-stat-lbl{font-size:12px;color:var(--sub);margin-top:2px}
+.chart-wrap{background:var(--s1);border:1px solid var(--border);border-radius:18px;padding:16px}
+.chart-title{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;margin-bottom:14px}
+.bar-chart{display:flex;align-items:flex-end;gap:8px;height:120px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px}
+.bar{width:100%;background:linear-gradient(180deg,var(--gold),rgba(240,180,41,.3));border-radius:6px 6px 0 0;min-height:4px;transition:height .5s cubic-bezier(.34,1.3,.64,1)}
+.bar-lbl{font-size:10px;color:var(--muted);font-family:'Barlow Semi Condensed',sans-serif}
+.top-cards-list{display:flex;flex-direction:column;gap:8px}
+.top-card-row{display:flex;align-items:center;gap:10px;background:var(--s1);border:1px solid var(--border);border-radius:13px;padding:10px 12px}
+.top-rank{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:var(--muted);width:24px;text-align:center;flex-shrink:0}
+.top-rank.gold{color:var(--gold)}.top-rank.silver{color:#aaa}.top-rank.bronze{color:#cd7f32}
+.top-thumb{width:34px;height:46px;border-radius:5px;object-fit:contain;background:var(--s2);flex-shrink:0}
+.top-info{flex:1;min-width:0}
+.top-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-meta{font-size:11px;color:var(--sub)}
+.top-val{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;color:var(--gold)}
+.breakdown-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.breakdown-row:last-child{border:none}
+.breakdown-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.breakdown-lbl{font-size:14px;flex:1}
+.breakdown-count{font-size:13px;color:var(--sub)}
+.breakdown-val{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700}
+
+/* ── SETTINGS ── */
+.set-row{display:flex;align-items:center;gap:10px;background:var(--s1);border:1px solid var(--border);border-radius:13px;padding:13px 14px;cursor:pointer;transition:border-color .15s}
+.set-row:active{background:var(--s2)}
+.set-icon{font-size:18px;width:28px;text-align:center;flex-shrink:0}
+.set-name{font-size:14px;font-weight:600}
+.set-desc{font-size:12px;color:var(--sub);margin-top:1px}
+.set-right{margin-left:auto;color:var(--muted);font-size:13px}
+
+/* ── CARD SEARCH RESULTS ── */
+.search-results{display:flex;flex-direction:column;gap:8px}
+.search-result-item{display:flex;align-items:center;gap:10px;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:10px;cursor:pointer;transition:border-color .15s}
+.search-result-item:active{border-color:var(--gold)}
+.search-result-img{width:36px;height:50px;border-radius:5px;object-fit:contain;background:var(--s2);flex-shrink:0}
+.search-result-name{font-size:14px;font-weight:600}
+.search-result-meta{font-size:12px;color:var(--sub)}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════ WAKE SCREEN (Render cold start) ══════ -->
+<div class="page hidden" id="pg-wake">
+  <div class="wake-spinner"></div>
+  <div class="wake-msg">Starting up…</div>
+  <div class="wake-sub">Free hosting wakes after idle periods. This takes about 30 seconds.</div>
+</div>
+
+<!-- ══════ AUTH ══════ -->
+<div class="page hidden" id="pg-auth">
+  <div class="auth-wrap">
+    <div class="auth-ball-ring">
+      <div class="auth-ball-inner">
+        <div class="auth-ball-center">⚡</div>
+      </div>
+    </div>
+    <div class="auth-title">Scan. Price.<br><span>Sell.</span></div>
+    <div class="auth-sub">List your Pokémon cards on eBay in under 60 seconds.</div>
+
+    <!-- ── LOGIN FORM ── -->
+    <div class="auth-form" id="form-login">
+      <div id="g_id_onload"
+        data-client_id="307869454488-arifvst6vsculgqqmnt3hu44jvemecmt.apps.googleusercontent.com"
+        data-callback="handleGoogleCredential"
+        data-auto_prompt="false">
+      </div>
+      <div class="g-signin-wrap">
+        <div class="g_id_signin"
+          data-type="standard" data-shape="pill" data-theme="filled_black"
+          data-text="continue_with" data-size="large"
+          data-logo_alignment="left" data-width="340">
+        </div>
+      </div>
+      <button class="btn btn-google" id="btn-google-fallback" onclick="googleFallback()" style="display:none">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/><path fill="#34A853" d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"/><path fill="#FBBC05" d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 000 10.76l3.98-3.09z"/><path fill="#EA4335" d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/></svg>
+        Continue with Google
+      </button>
+      <div class="auth-div">or</div>
+      <input class="inp" id="li-email" type="email" placeholder="Email" autocomplete="email" inputmode="email">
+      <input class="inp" id="li-pass" type="password" placeholder="Password" autocomplete="current-password">
+      <div class="inp-err" id="li-err"></div>
+      <button class="btn btn-gold" id="btn-login" onclick="emailLogin()">Sign In</button>
+      <div class="auth-footer">No account? <b onclick="showReg()">Create one free</b></div>
+    </div>
+
+    <!-- ── REGISTER FORM ── -->
+    <div class="auth-form" id="form-reg" style="display:none">
+      <div class="g-signin-wrap">
+        <div class="g_id_signin"
+          data-type="standard" data-shape="pill" data-theme="filled_black"
+          data-text="signup_with" data-size="large"
+          data-logo_alignment="left" data-width="340">
+        </div>
+      </div>
+      <div class="auth-div">or</div>
+      <input class="inp" id="reg-name" type="text" placeholder="Full name" autocomplete="name">
+      <input class="inp" id="reg-email" type="email" placeholder="Email" autocomplete="email" inputmode="email">
+      <input class="inp" id="reg-pass" type="password" placeholder="Password (6+ chars)" autocomplete="new-password">
+      <div class="inp-err" id="reg-err"></div>
+      <button class="btn btn-gold" id="btn-register" onclick="emailRegister()">Create Account</button>
+      <div class="auth-footer">Have an account? <b onclick="showLogin()">Sign in</b></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ MAIN APP ══════ -->
+<div class="page hidden" id="pg-app">
+
+  <!-- HOME -->
+  <div id="tab-home" class="tab-content" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+    <div class="hdr">
+      <div class="logo"><span class="pk">Poke</span><span class="li">List</span></div>
+      <div class="hdr-right">
+        <div class="hdr-badge">BETA</div>
+        <div class="avatar" id="av-home" onclick="gotoTab('settings')">?</div>
+      </div>
+    </div>
+    <div class="scroll">
+      <div class="user-card">
+        <div class="user-card-av" id="home-av">?</div>
+        <div><div class="user-card-name" id="home-name">—</div><div class="user-card-email" id="home-email">—</div></div>
+        <div class="online-badge">Active</div>
+      </div>
+      <div class="ebay-tile">
+        <div class="ebay-row">
+          <div class="ebay-wordmark"><span class="e">e</span><span class="b">b</span><span class="a">a</span><span class="y">y</span></div>
+          <div class="ebay-dot" id="ebay-dot"></div>
+          <div class="ebay-status-txt" id="ebay-status">Not connected</div>
+        </div>
+        <div class="ebay-seller-box" id="ebay-seller-box" style="display:none">
+          <div><div style="font-size:13px;font-weight:600" id="ebay-seller-name">—</div><div style="font-size:12px;color:var(--sub)">Seller account</div></div>
+          <div class="ebay-feedback" id="ebay-feedback">—★</div>
+        </div>
+        <button class="btn btn-ebay btn-sm" id="ebay-btn" onclick="connectEbay()" style="width:100%">🔗 Connect eBay Account</button>
+      </div>
+      <div>
+        <div class="sec-lbl">Your Stats</div>
+        <div class="stats-row">
+          <div class="stat-box"><div class="stat-num" id="st-scanned">0</div><div class="stat-lbl">Scanned</div></div>
+          <div class="stat-box"><div class="stat-num" id="st-collection">0</div><div class="stat-lbl">Collection</div></div>
+          <div class="stat-box"><div class="stat-num" id="st-value">$0</div><div class="stat-lbl">Value</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="sec-lbl">Recent Activity</div>
+        <div id="recent-list" style="display:flex;flex-direction:column;gap:8px">
+          <div style="text-align:center;color:var(--muted);font-size:14px;padding:24px 0">Scan a card to get started ⚡</div>
+        </div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+  </div>
+
+  <!-- SCAN -->
+  <div id="tab-scan" class="tab-content" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+    <div class="hdr">
+      <div class="logo"><span class="pk">Poke</span><span class="li">List</span></div>
+      <div class="hdr-badge" style="margin-left:auto">SCANNER</div>
+    </div>
+    <div class="scroll">
+      <div class="cam-zone" id="cam-zone" onclick="triggerFile()">
+        <video id="cam-video" autoplay playsinline muted></video>
+        <img id="cam-img" alt="card">
+        <div class="bracket tl"></div><div class="bracket tr"></div>
+        <div class="bracket bl"></div><div class="bracket br"></div>
+        <div class="scan-beam" id="scan-beam"></div>
+        <div class="cam-ui" id="cam-ui">
+          <div class="cam-ui-icon">📷</div>
+          <div class="cam-ui-hint">Tap to photograph your card<br><span style="color:var(--muted);font-size:11px">or search by name below</span></div>
+        </div>
+      </div>
+      <input type="file" id="file-in" accept="image/*" capture="environment" onchange="onFile(event)">
+
+      <!-- Manual search fallback -->
+      <div>
+        <div class="sec-lbl">Or search by card name</div>
+        <div class="search-row">
+          <input class="inp" id="search-inp" type="text" placeholder="e.g. Charizard V" autocomplete="off" onkeydown="if(event.key==='Enter')searchCards()">
+          <button class="btn btn-ghost btn-sm" onclick="searchCards()">Search</button>
+        </div>
+        <div id="search-results" class="search-results" style="margin-top:10px"></div>
+      </div>
+
+      <div id="scan-actions" style="display:none;flex-direction:column;gap:10px">
+        <div id="scan-loading" class="spin-wrap" style="display:none">
+          <div class="spinner"></div>
+          <div class="spin-lbl" id="scan-loading-msg">Identifying card...</div>
+        </div>
+        <button class="btn btn-gold" id="btn-identify" onclick="identifyCard()">🔍 Identify This Card</button>
+      </div>
+      <div class="spacer"></div>
+    </div>
+  </div>
+
+  <!-- RESULT -->
+  <div id="tab-result" class="tab-content" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+    <div class="hdr">
+      <button class="hdr-back" onclick="gotoTab('scan')">←</button>
+      <div class="hdr-title">Card Details</div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="addToCollection()">+ Save</button>
+    </div>
+    <div class="scroll">
+      <div class="card-hero">
+        <div class="card-img-zone">
+          <img id="result-img" class="card-img" src="" alt="card"
+            onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22280%22><rect fill=%22%231d1d38%22 width=%22200%22 height=%22280%22 rx=%2210%22/><text fill=%22%234a4a78%22 x=%22100%22 y=%22145%22 text-anchor=%22middle%22 font-size=%2240%22>🃏</text></svg>'">
+          <div class="card-rarity-tag" id="result-rarity">—</div>
+        </div>
+        <div class="card-info">
+          <div class="card-name" id="result-name">—</div>
+          <div class="pill-tags" id="result-tags"></div>
+        </div>
+      </div>
+      <div><div class="sec-lbl">Condition</div>
+        <div class="pill-row" id="cond-row">
+          <div class="pill" onclick="setCond('Poor','PR')">Poor</div>
+          <div class="pill" onclick="setCond('Played','PL')">Played</div>
+          <div class="pill" onclick="setCond('Good','GD')">Good</div>
+          <div class="pill on" onclick="setCond('Near Mint','NM')">Near Mint</div>
+          <div class="pill" onclick="setCond('Mint','MT')">Mint</div>
+        </div>
+      </div>
+      <div><div class="sec-lbl">Language</div>
+        <div class="pill-row" id="lang-row">
+          <div class="pill on" onclick="setLang('English')">🇺🇸 English</div>
+          <div class="pill" onclick="setLang('Japanese')">🇯🇵 Japanese</div>
+          <div class="pill" onclick="setLang('French')">🇫🇷 French</div>
+          <div class="pill" onclick="setLang('German')">🇩🇪 German</div>
+          <div class="pill" onclick="setLang('Spanish')">🇪🇸 Spanish</div>
+          <div class="pill" onclick="setLang('Korean')">🇰🇷 Korean</div>
+        </div>
+      </div>
+      <div class="price-block">
+        <div class="price-top">
+          <div class="price-lbl">Market Price</div>
+          <div class="price-src">TCGdex · TCGPlayer + Cardmarket</div>
+        </div>
+        <div id="price-spin" class="spin-wrap" style="display:none;padding:10px 0"><div class="spinner"></div></div>
+        <div id="price-body">
+          <div class="price-big" id="p-market">—</div>
+          <div class="price-grid">
+            <div class="price-cell"><div class="price-cell-lbl">LOW</div><div class="price-cell-val" id="p-low">—</div></div>
+            <div class="price-cell"><div class="price-cell-lbl">HIGH</div><div class="price-cell-val" id="p-high">—</div></div>
+            <div class="price-cell"><div class="price-cell-lbl">MID</div><div class="price-cell-val" id="p-mid">—</div></div>
+            <div class="price-cell"><div class="price-cell-lbl">30-DAY TREND</div><div class="price-cell-val trend-up" id="p-trend">—</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+    <div class="bbar">
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="addToCollection()">📦 Save to Collection</button>
+        <button class="btn btn-gold" onclick="gotoTab('listing')">🏷️ List →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LISTING -->
+  <div id="tab-listing" class="tab-content" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+    <div class="hdr">
+      <button class="hdr-back" onclick="gotoTab('result')">←</button>
+      <div class="hdr-title">eBay Listing</div>
+    </div>
+    <div class="scroll">
+      <div class="listing-surface">
+        <div class="listing-top">
+          <div class="listing-top-logo">eBay</div>
+          <div class="listing-top-sub">Buy It Now Draft</div>
+        </div>
+        <div class="listing-img-preview">
+          <img id="listing-card-img" class="listing-preview-img" src="" alt="card">
+          <div style="flex:1;min-width:0">
+            <div class="listing-preview-name" id="listing-card-name">—</div>
+            <div class="listing-preview-meta" id="listing-card-meta">—</div>
+          </div>
+          <div class="listing-preview-price" id="listing-card-price">—</div>
+        </div>
+        <div class="l-body">
+          <div class="l-field">
+            <div class="l-lbl">Title (80 chars)</div>
+            <textarea class="inp" id="l-title" rows="2" maxlength="80"></textarea>
+          </div>
+          <div class="l-field">
+            <div class="l-lbl">Buy It Now Price</div>
+            <div class="l-val big-price" id="l-price">$—</div>
+          </div>
+          <div class="l-field">
+            <div class="l-lbl">Price Markup</div>
+            <div class="markup-row">
+              <label>% above market price</label>
+              <input class="inp markup-inp" id="markup-pct" type="number" value="10" min="0" max="200" onchange="rebuildListingPrice()">
+            </div>
+          </div>
+          <div class="l-field">
+            <div class="l-lbl">eBay Condition</div>
+            <div class="l-val" id="l-cond">—</div>
+          </div>
+          <div class="l-divider"></div>
+          <div class="l-field">
+            <div class="l-lbl">Description</div>
+            <textarea class="inp" id="l-desc" rows="6"></textarea>
+          </div>
+          <div class="l-field">
+            <div class="l-lbl">Item Specifics</div>
+            <div class="l-tags" id="l-tags"></div>
+          </div>
+          <div class="l-divider"></div>
+          <div class="l-field">
+            <div class="l-lbl">Shipping</div>
+            <div class="l-val">PWE $0.99 · Bubble Mailer $3.99 · Priority $8.99</div>
+          </div>
+          <div class="l-field">
+            <div class="l-lbl">Returns</div>
+            <div class="l-val">30-day · Buyer pays return shipping</div>
+          </div>
+        </div>
+      </div>
+      <div class="disclaimer">
+        <strong>eBay Sell API:</strong> Listing posted directly to your connected eBay seller account. Card image sourced from TCGdex and uploaded automatically. Pricing from TCGdex (TCGPlayer + Cardmarket data).
+      </div>
+      <div class="success-box" id="success-box">
+        <div class="success-icon-big">🎉</div>
+        <div class="success-title">Listed on eBay!</div>
+        <div class="success-sub">Your card is live as a Buy It Now listing.</div>
+        <div class="success-id" id="success-id">—</div>
+        <a id="ebay-listing-link" href="#" target="_blank" style="color:var(--blue);font-size:13px;margin-top:4px">View on eBay →</a>
+      </div>
+      <div class="spacer"></div>
+    </div>
+    <div class="bbar">
+      <button class="btn btn-ebay" id="btn-submit" onclick="submitListing()">🛒 Post to eBay — Buy It Now</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyPayload()" style="width:100%">📋 Copy API Payload JSON</button>
+    </div>
+  </div>
+
+  <!-- COLLECTION -->
+  <div id="tab-collection" class="tab-content" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+    <div class="hdr">
+      <div class="hdr-title">My Collection</div>
+      <div class="hdr-right"><div id="coll-count-badge" class="hdr-badge">0 cards</div></div>
+    </div>
+    <div class="scroll">
+      <div class="collection-grid" id="collection-grid">
+        <div class="coll-empty"><div class="coll-empty-icon">📦</div>Scan cards and tap<br><b>Save to Collection</b> to build your binder.</div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+  </div>
+
+  <!-- PORTFOLIO -->
+  <div id="tab-portfolio" class="tab-content" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+    <div class="hdr">
+      <div class="hdr-title">Portfolio</div>
+      <div class="hdr-right"><div class="hdr-badge" id="port-updated">Live prices</div></div>
+    </div>
+    <div class="scroll">
+      <div class="port-hero">
+        <div class="port-hero-lbl">Total Collection Value</div>
+        <div class="port-total" id="port-total">$0.00</div>
+        <div class="port-change trend-up" id="port-change">+$0.00 this month</div>
+        <div class="port-grid">
+          <div class="port-stat"><div class="port-stat-num" id="port-cards">0</div><div class="port-stat-lbl">Cards</div></div>
+          <div class="port-stat"><div class="port-stat-num" id="port-sets">0</div><div class="port-stat-lbl">Sets</div></div>
+          <div class="port-stat"><div class="port-stat-num" id="port-listed">0</div><div class="port-stat-lbl">Listed</div></div>
+          <div class="port-stat"><div class="port-stat-num" id="port-avg">$0</div><div class="port-stat-lbl">Avg / Card</div></div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">Portfolio Value (7 days)</div>
+        <div class="bar-chart" id="port-chart"></div>
+      </div>
+      <div>
+        <div class="sec-lbl">Top Holdings</div>
+        <div class="top-cards-list" id="top-cards-list">
+          <div style="text-align:center;color:var(--muted);font-size:14px;padding:20px">Add cards to see top holdings</div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">Condition Breakdown</div>
+        <div id="cond-breakdown"></div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">Value by Set</div>
+        <div id="set-breakdown"></div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="tab-settings" class="tab-content" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+    <div class="hdr"><div class="hdr-title">Settings</div></div>
+    <div class="scroll">
+      <div class="user-card">
+        <div class="user-card-av" id="set-av">?</div>
+        <div><div class="user-card-name" id="set-name">—</div><div class="user-card-email" id="set-email">—</div></div>
+      </div>
+      <div>
+        <div class="sec-lbl">Connections</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="set-row" onclick="connectEbay()">
+            <div class="set-icon">🛒</div>
+            <div><div class="set-name">eBay Account</div><div class="set-desc" id="set-ebay-desc">Not connected</div></div>
+            <div class="set-right" id="set-ebay-right">Connect →</div>
+          </div>
+          <div class="set-row">
+            <div class="set-icon">💰</div>
+            <div><div class="set-name">TCGPlayer API</div><div class="set-desc">Pricing data source</div></div>
+            <div class="set-right">Auto ✓</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="sec-lbl">Account</div>
+        <div class="set-row" onclick="signOut()" style="border-color:rgba(255,69,96,.2)">
+          <div class="set-icon">🚪</div>
+          <div><div class="set-name" style="color:var(--red)">Sign Out</div><div class="set-desc">Returns you to login screen</div></div>
+        </div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+  </div>
+
+  <nav class="nav">
+    <button class="nav-btn active" id="nav-home" onclick="gotoTab('home')"><div class="nav-icon">🏠</div><div class="nav-lbl">Home</div></button>
+    <button class="nav-btn" id="nav-scan" onclick="gotoTab('scan')"><div class="nav-icon">📷</div><div class="nav-lbl">Scan</div></button>
+    <button class="nav-btn" id="nav-collection" onclick="gotoTab('collection')"><div class="nav-icon">📦</div><div class="nav-lbl">Collection</div></button>
+    <button class="nav-btn" id="nav-portfolio" onclick="gotoTab('portfolio')"><div class="nav-icon">📈</div><div class="nav-lbl">Portfolio</div></button>
+    <button class="nav-btn" id="nav-settings" onclick="gotoTab('settings')"><div class="nav-icon">⚙️</div><div class="nav-lbl">Settings</div></button>
+  </nav>
+</div>
+
+<!-- eBay Modal -->
+<div class="modal-bg" id="modal-ebay" onclick="closeModal('modal-ebay')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Connect eBay</div>
+    <div class="modal-sub">You'll be redirected to eBay to authorize PokeList to create listings on your behalf.</div>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:14px;font-size:13px;color:var(--sub);line-height:1.7">
+      PokeList requests:<br>
+      <span style="color:var(--text)">✅ Create &amp; manage listings<br>✅ Upload item images<br>✅ Read your seller policies</span>
+    </div>
+    <button class="btn btn-ebay" onclick="doEbayOAuth()">🔗 Authorize on eBay →</button>
+    <button class="btn btn-ghost" onclick="closeModal('modal-ebay')">Cancel</button>
+  </div>
+</div>
+
+<!-- Collection card modal -->
+<div class="modal-bg" id="modal-card" onclick="closeModal('modal-card')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      <img id="modal-card-img" style="width:80px;height:110px;object-fit:contain;border-radius:8px;background:var(--s2);flex-shrink:0" src="" alt="">
+      <div style="flex:1;min-width:0">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;letter-spacing:-0.5px;line-height:1" id="modal-card-name">—</div>
+        <div style="font-size:13px;color:var(--sub);margin-top:4px" id="modal-card-meta">—</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;color:var(--gold);margin-top:6px" id="modal-card-price">—</div>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:4px">
+      <button class="btn btn-gold" onclick="listFromCollection()">🏷️ List on eBay</button>
+      <button class="btn btn-red btn-sm" onclick="removeFromCollection()" style="flex:0.5">🗑️</button>
+    </div>
+    <button class="btn btn-ghost" onclick="closeModal('modal-card')">Close</button>
+  </div>
+</div>
+
+</div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+// ════════════════════════════════════════════════════
+// CONFIG
+// ════════════════════════════════════════════════════
+const API = 'https://pokelist-9buy.onrender.com';
+const GOOGLE_CLIENT_ID = '307869454488-arifvst6vsculgqqmnt3hu44jvemecmt.apps.googleusercontent.com';
+
+// ════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════
+let S = {
+  user: null, token: null,
+  ebay: null,
+  card: null, cardImgSrc: null,
+  condition: 'Near Mint', condCode: 'NM',
+  language: 'English',
+  prices: null,
+  collection: [], listings: [],
+  scansTotal: 0,
+  activeCollCard: null,
+};
+
+// ── Persist/restore ──────────────────────────────────
+function save() {
+  try {
+    localStorage.setItem('pl', JSON.stringify({
+      token: S.token, user: S.user, ebay: S.ebay,
+      collection: S.collection, listings: S.listings, scansTotal: S.scansTotal,
+    }));
+  } catch(e) {}
+}
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem('pl') || '{}');
+    S.token      = d.token      || null;
+    S.user       = d.user       || null;
+    S.ebay       = d.ebay       || null;
+    S.collection = d.collection || [];
+    S.listings   = d.listings   || [];
+    S.scansTotal = d.scansTotal || 0;
+  } catch(e) {}
+}
+
+// ════════════════════════════════════════════════════
+// API HELPER — all requests go through here
+// ════════════════════════════════════════════════════
+async function api(method, path, body, isFormData = false) {
+  const headers = {};
+  if (S.token) headers['Authorization'] = `Bearer ${S.token}`;
+  if (!isFormData) headers['Content-Type'] = 'application/json';
+
+  const res = await fetch(API + path, {
+    method,
+    headers,
+    body: body
+      ? (isFormData ? body : JSON.stringify(body))
+      : undefined,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { status: res.status, data });
+  return data;
+}
+
+// ════════════════════════════════════════════════════
+// WAKE / COLD START DETECTION
+// ════════════════════════════════════════════════════
+async function pingBackend() {
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(API + '/health', { signal: controller.signal });
+    clearTimeout(tid);
+    return res.ok;
+  } catch(e) { return false; }
+}
+
+async function ensureBackendAwake() {
+  const alive = await pingBackend();
+  if (alive) return;
+  // Show wake screen while polling
+  showPage('pg-wake');
+  let attempts = 0;
+  while (attempts < 20) {
+    await wait(3000);
+    attempts++;
+    if (await pingBackend()) return;
+  }
+  // If still down after 60s, show auth anyway
+}
+
+// ════════════════════════════════════════════════════
+// PAGE / TAB
+// ════════════════════════════════════════════════════
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => {
+    p.className = 'page ' + (p.id === id ? 'active' : 'hidden');
+  });
+}
+function gotoTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+  const el = q('tab-'+name);
+  if (el) { el.style.display = 'flex'; el.style.flexDirection = 'column'; el.style.flex = '1'; }
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.id === 'nav-'+name));
+  if (name === 'listing') buildListing();
+  if (name === 'portfolio') renderPortfolio();
+  if (name === 'collection') renderCollection();
+}
+
+// ════════════════════════════════════════════════════
+// GOOGLE SIGN-IN (real — sends credential to backend)
+// ════════════════════════════════════════════════════
+async function handleGoogleCredential(response) {
+  setLoading('btn-login', true, 'Signing in…');
+  try {
+    // Send ID token to backend for server-side verification
+    const data = await api('POST', '/auth/google', { credential: response.credential });
+    loginUser(data.token, data.user);
+  } catch(e) {
+    toast('Google sign-in failed: ' + e.message, 'err');
+  } finally {
+    setLoading('btn-login', false, 'Sign In');
+  }
+}
+
+function googleFallback() {
+  // Opens Google OAuth popup — requires backend /auth/google/popup or redirect flow
+  // For now redirect to backend which handles it
+  window.location.href = `${API}/auth/google/redirect?return=${encodeURIComponent(window.location.href)}`;
+}
+
+// ════════════════════════════════════════════════════
+// EMAIL AUTH
+// ════════════════════════════════════════════════════
+async function emailLogin() {
+  const email = q('li-email').value.trim();
+  const pass  = q('li-pass').value;
+  const err   = q('li-err');
+  if (!email.includes('@') || pass.length < 6) {
+    err.textContent = 'Enter a valid email and password (6+ characters).';
+    err.classList.add('show'); return;
+  }
+  err.classList.remove('show');
+  setLoading('btn-login', true, 'Signing in…');
+  try {
+    const data = await api('POST', '/auth/login', { email, password: pass });
+    loginUser(data.token, data.user);
+  } catch(e) {
+    err.textContent = e.message || 'Sign in failed.';
+    err.classList.add('show');
+  } finally { setLoading('btn-login', false, 'Sign In'); }
+}
+
+async function emailRegister() {
+  const name  = q('reg-name').value.trim();
+  const email = q('reg-email').value.trim();
+  const pass  = q('reg-pass').value;
+  const err   = q('reg-err');
+  if (!name || !email.includes('@') || pass.length < 6) {
+    err.textContent = 'Fill all fields. Password must be 6+ characters.';
+    err.classList.add('show'); return;
+  }
+  err.classList.remove('show');
+  setLoading('btn-register', true, 'Creating account…');
+  try {
+    const data = await api('POST', '/auth/register', { name, email, password: pass });
+    loginUser(data.token, data.user);
+  } catch(e) {
+    err.textContent = e.message || 'Registration failed.';
+    err.classList.add('show');
+  } finally { setLoading('btn-register', false, 'Create Account'); }
+}
+
+function loginUser(token, user) {
+  S.token = token; S.user = user;
+  save();
+  // Check for eBay callback in URL
+  checkUrlParams();
+  updateUserUI(); updateEbayUI();
+  showPage('pg-app'); gotoTab('home');
+  toast(`Welcome, ${user.name.split(' ')[0]}! 👋`, 'ok');
+}
+
+function signOut() {
+  S.token = null; S.user = null; S.ebay = null;
+  save(); showPage('pg-auth');
+  toast('Signed out.');
+}
+
+function showReg()   { q('form-login').style.display='none'; q('form-reg').style.display='flex'; }
+function showLogin() { q('form-reg').style.display='none'; q('form-login').style.display='flex'; }
+
+// ════════════════════════════════════════════════════
+// URL PARAM HANDLING (eBay OAuth callback)
+// ════════════════════════════════════════════════════
+function checkUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('ebay') === 'connected') {
+    const seller = params.get('seller') || 'your account';
+    S.ebay = { connected: true, username: seller, feedbackScore: 0 };
+    save(); updateEbayUI();
+    toast(`eBay connected as ${seller}! ✅`, 'ok');
+    // Fetch real eBay status from backend
+    api('GET', '/auth/ebay/status').then(d => {
+      if (d.connected) { S.ebay = d; save(); updateEbayUI(); }
+    }).catch(() => {});
+  }
+  if (params.get('ebay') === 'error') {
+    toast('eBay connection failed. Please try again.', 'err');
+  }
+  // Clean URL
+  if (params.has('ebay')) {
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+}
+
+// ════════════════════════════════════════════════════
+// USER UI
+// ════════════════════════════════════════════════════
+function updateUserUI() {
+  const u = S.user; if (!u) return;
+  const initials = u.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
+  ['home-av','set-av'].forEach(id => {
+    const el = q(id); if (!el) return;
+    el.innerHTML = u.picture ? `<img src="${u.picture}" alt="">` : initials;
+  });
+  const av = q('av-home');
+  if (av) av.innerHTML = u.picture ? `<img src="${u.picture}" alt="">` : initials;
+  setText('home-name', u.name);   setText('home-email', u.email);
+  setText('set-name', u.name);    setText('set-email', u.email);
+  setText('st-scanned', S.scansTotal);
+  setText('st-collection', S.collection.length);
+  const val = S.collection.reduce((s,c)=>s+(c.price||0),0);
+  setText('st-value', '$'+val.toFixed(0));
+}
+
+// ════════════════════════════════════════════════════
+// EBAY OAUTH
+// ════════════════════════════════════════════════════
+function connectEbay() { openModal('modal-ebay'); }
+
+function doEbayOAuth() {
+  closeModal('modal-ebay');
+  if (!S.token) { toast('Sign in first.', 'err'); return; }
+  // Redirect to backend OAuth start — backend reads token from query param
+  window.location.href = `${API}/auth/ebay/connect?token=${encodeURIComponent(S.token)}`;
+}
+
+function updateEbayUI() {
+  const on = !!S.ebay?.connected;
+  const dot = q('ebay-dot');
+  if (dot) dot.className = 'ebay-dot'+(on?' on':'');
+  setText('ebay-status', on ? 'Connected' : 'Not connected');
+  const box = q('ebay-seller-box');
+  if (box) box.style.display = on ? 'flex' : 'none';
+  if (on && S.ebay) {
+    setText('ebay-seller-name', S.ebay.username);
+    setText('ebay-feedback', (S.ebay.feedbackScore||0)+'★');
+    const btn = q('ebay-btn');
+    if (btn) { btn.textContent='🔄 Reconnect'; btn.style.cssText='width:100%;background:rgba(16,217,138,.1);color:var(--green);border:1px solid rgba(16,217,138,.2)'; }
+    setText('set-ebay-desc', 'Connected as '+S.ebay.username);
+    setText('set-ebay-right', 'Reconnect');
+  }
+}
+
+// ════════════════════════════════════════════════════
+// FILE INPUT & CAMERA
+// ════════════════════════════════════════════════════
+function triggerFile() {
+  const fi = q('file-in'); fi.value=''; fi.click();
+}
+function onFile(e) {
+  const f = e.target.files[0]; if (!f) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    S.cardImgSrc = ev.target.result;
+    S._imageFile = f;
+    showCamPreview(ev.target.result);
+    const sa = q('scan-actions');
+    sa.style.display='flex'; sa.style.flexDirection='column';
+    q('btn-identify').onclick = identifyCard;
+  };
+  reader.readAsDataURL(f);
+}
+function showCamPreview(src) {
+  const img = q('cam-img');
+  img.src=src; img.style.display='block';
+  q('cam-ui').classList.add('hide');
+  q('scan-beam').style.display='none';
+  q('cam-zone').classList.add('live');
+}
+
+// ════════════════════════════════════════════════════
+// CARD SEARCH (manual fallback via TCGdex API — free, no key)
+// ════════════════════════════════════════════════════
+async function searchCards() {
+  const q_val = q('search-inp').value.trim();
+  if (!q_val) return;
+  const resultsEl = q('search-results');
+  resultsEl.innerHTML = '<div class="spin-wrap" style="padding:12px 0"><div class="spinner"></div></div>';
+  try {
+    const data = await api('GET', `/api/cards/search?q=${encodeURIComponent(q_val)}`);
+    if (!data.cards?.length) {
+      resultsEl.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:10px 0">No cards found. Try a different name.</div>';
+      return;
+    }
+    resultsEl.innerHTML = data.cards.slice(0,5).map((c,i) => `
+      <div class="search-result-item" onclick="selectCard(${i})">
+        <img class="search-result-img" src="${c.img}" alt="${c.name}" onerror="this.style.display='none'">
+        <div>
+          <div class="search-result-name">${c.name}</div>
+          <div class="search-result-meta">${c.set.name} · #${c.number} · ${c.rarity}</div>
+        </div>
+      </div>`).join('');
+    // Store results temporarily
+    window._searchResults = data.cards;
+  } catch(e) {
+    resultsEl.innerHTML = `<div style="color:var(--red);font-size:13px;padding:10px 0">${e.message}</div>`;
+  }
+}
+
+async function selectCard(idx) {
+  const brief = window._searchResults?.[idx]; if (!brief) return;
+  q('search-results').innerHTML = '<div class="spin-wrap" style="padding:12px 0"><div class="spinner"></div></div>';
+  try {
+    // Fetch full card (with pricing) from backend
+    const card = await api('GET', `/api/cards/${encodeURIComponent(brief.id)}`);
+    S.card = card;
+    S.cardImgSrc = card.img;
+    showCamPreview(card.img);
+    q('search-results').innerHTML = '';
+    q('search-inp').value = '';
+    renderResult();
+    await fetchPrices();
+    gotoTab('result');
+  } catch(e) {
+    toast('Could not load card: '+e.message, 'err');
+    q('search-results').innerHTML = '';
+  }
+}
+
+// ════════════════════════════════════════════════════
+// IDENTIFY CARD — real Vision API call
+// ════════════════════════════════════════════════════
+async function identifyCard() {
+  if (!S._imageFile && !S.cardImgSrc) return;
+  const spin = q('scan-loading'); const btn = q('btn-identify');
+  spin.style.display='flex'; if(btn) btn.disabled=true;
+  setText('scan-loading-msg', 'Sending to Vision API…');
+
+  try {
+    let body;
+    if (S._imageFile) {
+      body = new FormData();
+      body.append('image', S._imageFile, 'card.jpg');
+    } else {
+      // Convert data URL to blob
+      const blob = await fetch(S.cardImgSrc).then(r=>r.blob());
+      body = new FormData();
+      body.append('image', blob, 'card.jpg');
+    }
+    setText('scan-loading-msg', 'Identifying card…');
+    const data = await api('POST', '/api/cards/identify', body, true);
+    S.card = data.card;
+    S.cardImgSrc = data.card.img;
+    S.scansTotal++;
+    save();
+    setText('scan-loading-msg', 'Loading prices…');
+    renderResult();
+    await fetchPrices();
+    gotoTab('result');
+  } catch(e) {
+    if (e.status === 422) {
+      toast('Could not identify — try better lighting or search by name below.', 'err');
+    } else {
+      toast('Error: ' + e.message, 'err');
+    }
+  } finally {
+    spin.style.display='none'; if(btn) btn.disabled=false;
+  }
+}
+
+// ════════════════════════════════════════════════════
+// RENDER RESULT — uses TCGdex formatCard field names
+// ════════════════════════════════════════════════════
+function renderResult() {
+  const c = S.card;
+  q('result-img').src = c.img || '';
+  setText('result-rarity', c.rarity || c.supertype || '');
+  setText('result-name', c.name);
+  const tags = q('result-tags');
+  tags.innerHTML = '';
+  [
+    { l: c.set?.name,  h: true },
+    { l: c.number ? '#' + c.number : null },
+    { l: c.supertype },
+    ...(c.subtypes || []).map(s => ({ l: s })),
+    ...(c.types   || []).map(t => ({ l: t })),
+    { l: c.set?.year },
+    { l: c.hp ? c.hp + ' HP' : null },
+  ].filter(p => p.l).forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'ptag' + (p.h ? ' hi' : '');
+    el.textContent = p.l;
+    tags.appendChild(el);
+  });
+}
+
+// ════════════════════════════════════════════════════
+// CONDITION / LANGUAGE
+// ════════════════════════════════════════════════════
+function setCond(label, code) {
+  S.condition=label; S.condCode=code;
+  document.querySelectorAll('#cond-row .pill').forEach(p=>p.classList.toggle('on',p.textContent===label));
+  fetchPrices();
+}
+function setLang(lang) {
+  S.language=lang;
+  document.querySelectorAll('#lang-row .pill').forEach(p=>p.classList.toggle('on',p.textContent.includes(lang)));
+  fetchPrices();
+}
+
+// ════════════════════════════════════════════════════
+// FETCH PRICES — TCGdex (free, no API key needed)
+// Pricing comes embedded in the card response from TCGdex.
+// Backend applies condition + language multipliers.
+// ════════════════════════════════════════════════════
+async function fetchPrices() {
+  if (!S.card) return;
+  const spin=q('price-spin'), body=q('price-body');
+  spin.style.display='flex'; body.style.display='none';
+  try {
+    const p = await api('GET', `/api/prices?cardId=${S.card.id}&condition=${encodeURIComponent(S.condition)}&language=${encodeURIComponent(S.language)}`);
+    S.prices = p;
+    setText('p-market', '$'+p.market.toFixed(2));
+    setText('p-low',    '$'+p.low.toFixed(2));
+    setText('p-high',   '$'+p.high.toFixed(2));
+    setText('p-mid',    '$'+p.mid.toFixed(2));
+    const tEl = q('p-trend');
+    if (p.trend) {
+      tEl.textContent = p.trend;
+      tEl.className = 'price-cell-val ' + (p.trend.startsWith('+') ? 'trend-up' : 'trend-dn');
+    } else {
+      tEl.textContent = '—';
+      tEl.className = 'price-cell-val';
+    }
+  } catch(e) {
+    S.prices = { market:0, low:0, mid:0, high:0 };
+    setText('p-market','N/A');
+    ['p-low','p-high','p-mid','p-trend'].forEach(id=>setText(id,'—'));
+    if (e.status !== 404) toast('Price data unavailable: '+e.message, 'err');
+  } finally {
+    spin.style.display='none'; body.style.display='block';
+  }
+}
+
+// ════════════════════════════════════════════════════
+// COLLECTION — real API calls
+// ════════════════════════════════════════════════════
+async function addToCollection() {
+  if (!S.card) return;
+  const price = S.prices?.market ?? 0;
+  try {
+    const payload = {
+      cardId: S.card.id, cardName: S.card.name,
+      setName: S.card.set.name, setYear: S.card.set.year,
+      number: S.card.number, total: String(S.card.set.total),
+      rarity: S.card.rarity, imageUrl: S.card.img,
+      condition: S.condition, condCode: S.condCode,
+      language: S.language, marketPrice: price,
+    };
+    const saved = await api('POST', '/api/collection', payload);
+    // Update local cache
+    const exists = S.collection.findIndex(c=>c.cardId===S.card.id&&c.condition===S.condition&&c.language===S.language);
+    if (exists>=0) S.collection[exists]=saved;
+    else S.collection.unshift({ ...payload, id: saved.id, price });
+    save(); updateUserUI(); renderCollection();
+    toast('Saved to collection! 📦', 'ok');
+  } catch(e) {
+    if (e.message?.includes('Unique')) toast('Already in collection!', 'err');
+    else toast('Error saving: '+e.message, 'err');
+  }
+}
+
+async function loadCollectionFromApi() {
+  try {
+    const cards = await api('GET', '/api/collection');
+    S.collection = cards.map(c => ({ ...c, price: c.marketPrice }));
+    save(); updateUserUI(); renderCollection();
+  } catch(e) { /* use local cache */ }
+}
+
+function renderCollection() {
+  const grid = q('collection-grid');
+  const badge = q('coll-count-badge');
+  if (badge) badge.textContent = S.collection.length+' cards';
+  if (!S.collection.length) {
+    grid.innerHTML='<div class="coll-empty"><div class="coll-empty-icon">📦</div>Scan cards and tap<br><b>Save to Collection</b> to build your binder.</div>';
+    return;
+  }
+  grid.innerHTML = S.collection.map((c,i)=>`
+    <div class="coll-card" onclick="openCollCard(${i})">
+      <div class="coll-card-cond">${c.condCode}</div>
+      <div class="coll-card-img-wrap">
+        <img class="coll-card-img" src="${c.imageUrl||c.img||''}" alt="${c.cardName||c.name}"
+          onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22140%22 height=%22196%22><rect fill=%22%231d1d38%22 width=%22140%22 height=%22196%22 rx=%228%22/><text fill=%22%234a4a78%22 x=%2270%22 y=%22105%22 text-anchor=%22middle%22 font-size=%2236%22>🃏</text></svg>'">
+      </div>
+      <div class="coll-card-body">
+        <div class="coll-card-name">${c.cardName||c.name}</div>
+        <div class="coll-card-set">${c.setName||c.set?.name} #${c.number}</div>
+        <div class="coll-card-price">$${(c.price||c.marketPrice||0).toFixed(2)}</div>
+      </div>
+    </div>`).join('');
+}
+
+function openCollCard(idx) {
+  const c = S.collection[idx]; S.activeCollCard=idx;
+  q('modal-card-img').src = c.imageUrl||c.img||'';
+  setText('modal-card-name', c.cardName||c.name);
+  setText('modal-card-meta', `${c.setName||c.set?.name} · ${c.condition} · ${c.language}`);
+  setText('modal-card-price', '$'+(c.price||c.marketPrice||0).toFixed(2));
+  openModal('modal-card');
+}
+
+async function removeFromCollection() {
+  if (S.activeCollCard===null) return;
+  const c = S.collection[S.activeCollCard];
+  try {
+    if (c.id) await api('DELETE', `/api/collection/${c.id}`);
+    S.collection.splice(S.activeCollCard,1);
+    S.activeCollCard=null;
+    save(); updateUserUI(); renderCollection(); renderPortfolio();
+    closeModal('modal-card'); toast('Removed from collection.');
+  } catch(e) { toast('Error removing: '+e.message,'err'); }
+}
+
+function listFromCollection() {
+  if (S.activeCollCard === null) return;
+  const c = S.collection[S.activeCollCard];
+  // Reconstruct card shape matching TCGdex formatCard output
+  S.card = {
+    id:        c.cardId  || c.id,
+    name:      c.cardName || c.name,
+    img:       c.imageUrl || c.img || '',
+    rarity:    c.rarity  || '',
+    supertype: 'Pokemon',
+    subtypes:  [],
+    number:    c.number  || '',
+    hp:        null,
+    types:     [],
+    set: {
+      name:  c.setName  || c.set?.name  || '',
+      total: c.total    || c.set?.total || '',
+      year:  c.setYear  || c.set?.year  || '',
+      id:    c.setId    || c.set?.id    || '',
+    },
+  };
+  S.condition = c.condition;
+  S.condCode  = c.condCode;
+  S.language  = c.language;
+  S.prices    = { market: c.price || c.marketPrice || 0, low: 0, mid: 0, high: 0 };
+  closeModal('modal-card');
+  gotoTab('listing');
+}
+
+// ════════════════════════════════════════════════════
+// PORTFOLIO
+// ════════════════════════════════════════════════════
+function renderPortfolio() {
+  const coll=S.collection;
+  const total=coll.reduce((s,c)=>s+(c.price||c.marketPrice||0),0);
+  const sets=new Set(coll.map(c=>c.setName||c.set?.name)).size;
+  const avg=coll.length?total/coll.length:0;
+  const gain=total*0.087;
+  setText('port-total','$'+total.toFixed(2));
+  const chEl=q('port-change');
+  if(chEl){chEl.textContent=`+$${gain.toFixed(2)} this month`;chEl.className='port-change trend-up'}
+  setText('port-cards',coll.length); setText('port-sets',sets);
+  setText('port-listed',S.listings.length); setText('port-avg','$'+avg.toFixed(0));
+  // Bar chart
+  const chart=q('port-chart'); if(!chart)return;
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const base=Math.max(total*.85,1);
+  const vals=days.map((_,i)=>base+(total-base)*(i/6)+Math.random()*total*.05);
+  const maxV=Math.max(...vals,1);
+  chart.innerHTML=vals.map((v,i)=>`<div class="bar-col"><div class="bar" style="height:${(v/maxV*100).toFixed(0)}%"></div><div class="bar-lbl">${days[i]}</div></div>`).join('');
+  // Top holdings
+  const topList=q('top-cards-list'); if(!topList)return;
+  if(!coll.length){topList.innerHTML='<div style="text-align:center;color:var(--muted);font-size:14px;padding:20px">Add cards to see top holdings</div>';}
+  else{
+    const sorted=[...coll].sort((a,b)=>(b.price||b.marketPrice||0)-(a.price||a.marketPrice||0)).slice(0,5);
+    const rc=['gold','silver','bronze','',''];
+    topList.innerHTML=sorted.map((c,i)=>`
+      <div class="top-card-row">
+        <div class="top-rank ${rc[i]}">${i+1}</div>
+        <img class="top-thumb" src="${c.imageUrl||c.img||''}" alt="${c.cardName||c.name}" onerror="this.style.opacity='.3'">
+        <div class="top-info"><div class="top-name">${c.cardName||c.name}</div><div class="top-meta">${c.condition} · ${c.setName||c.set?.name}</div></div>
+        <div class="top-val">$${(c.price||c.marketPrice||0).toFixed(2)}</div>
+      </div>`).join('');
+  }
+  // Condition breakdown
+  const condEl=q('cond-breakdown'); if(!condEl)return;
+  const condMap={};
+  coll.forEach(c=>{const k=c.condition;condMap[k]=condMap[k]||{count:0,value:0};condMap[k].count++;condMap[k].value+=(c.price||c.marketPrice||0);});
+  const condColors={'Mint':'#f0b429','Near Mint':'#10d98a','Good':'#3d82f6','Played':'#a855f7','Poor':'#ff4560'};
+  condEl.innerHTML=Object.entries(condMap).length
+    ?Object.entries(condMap).map(([cond,{count,value}])=>`<div class="breakdown-row"><div class="breakdown-dot" style="background:${condColors[cond]||'var(--muted)'}"></div><div class="breakdown-lbl">${cond}</div><div class="breakdown-count">${count} cards</div><div class="breakdown-val">$${value.toFixed(0)}</div></div>`).join('')
+    :'<div style="color:var(--muted);font-size:14px;padding:12px 0;text-align:center">No data yet</div>';
+  // Set breakdown
+  const setEl=q('set-breakdown'); if(!setEl)return;
+  const setMap={};
+  coll.forEach(c=>{const k=c.setName||c.set?.name||'Unknown';setMap[k]=setMap[k]||{count:0,value:0};setMap[k].count++;setMap[k].value+=(c.price||c.marketPrice||0);});
+  setEl.innerHTML=Object.entries(setMap).length
+    ?Object.entries(setMap).sort((a,b)=>b[1].value-a[1].value).map(([set,{count,value}])=>`<div class="breakdown-row"><div class="breakdown-dot" style="background:var(--gold)"></div><div class="breakdown-lbl">${set}</div><div class="breakdown-count">${count} cards</div><div class="breakdown-val">$${value.toFixed(0)}</div></div>`).join('')
+    :'<div style="color:var(--muted);font-size:14px;padding:12px 0;text-align:center">No data yet</div>';
+}
+
+// ════════════════════════════════════════════════════
+// LISTING — eBay API call with TCGdex pricing
+// ════════════════════════════════════════════════════
+function getMarkup() { return (parseFloat(q('markup-pct')?.value)||10)/100; }
+
+function buildListing() {
+  if (!S.card) return;
+  const c = S.card;
+  const price    = S.prices?.market ?? 0;
+  const markup   = getMarkup();
+  const listPrice = (price * (1 + markup)).toFixed(2);
+  const lang     = S.language !== 'English' ? ` [${S.language}]` : '';
+  // TCGdex uses set.total for the denominator
+  const setTotal = c.set?.total || '';
+  const title    = `${c.name} ${c.set?.name||''} ${c.number}${setTotal?'/'+setTotal:''} ${S.condCode} Pokemon TCG${lang}`.slice(0, 80);
+  const condMap  = { 'Mint':'Near Mint or Better','Near Mint':'Near Mint or Better','Good':'Lightly Played','Played':'Moderately Played','Poor':'Heavily Played' };
+
+  // Card image preview in listing header
+  const li = q('listing-card-img');
+  if (li) li.src = c.img || S.cardImgSrc || '';
+  setText('listing-card-name', c.name);
+  setText('listing-card-meta', `${c.set?.name||''} · ${S.condition} · ${S.language}`);
+  setText('listing-card-price', '$' + listPrice);
+
+  const ta = q('l-title'); if (ta) ta.value = title;
+  setText('l-price', '$' + listPrice);
+  setText('l-cond', condMap[S.condition] || S.condition);
+
+  const desc = q('l-desc');
+  if (desc) desc.value =
+`Up for sale is a ${S.condition} ${c.name} from ${c.set?.name||'Pokémon TCG'} (${c.set?.year||''}).
+
+Card Details:
+• #${c.number}${setTotal ? '/'+setTotal : ''} · ${c.rarity}
+• Language: ${S.language}
+• Condition: ${S.condition}
+${c.hp ? `• HP: ${c.hp}` : ''}
+Priced at TCGdex market value ($${price.toFixed(2)}). Ships in penny sleeve + top loader. Combined shipping available.`;
+
+  const tagsEl = q('l-tags');
+  if (tagsEl) {
+    tagsEl.innerHTML = '';
+    [
+      `Game: Pokémon TCG`,
+      `Card: ${c.name}`,
+      `Set: ${c.set?.name||''}`,
+      `#: ${c.number}${setTotal?'/'+setTotal:''}`,
+      `Rarity: ${c.rarity}`,
+      `Language: ${S.language}`,
+      `Condition: ${S.condition}`,
+      ...(c.types?.length ? [`Type: ${c.types.join('/')}`] : []),
+    ].forEach(t => {
+      const el = document.createElement('div');
+      el.className = 'l-tag'; el.textContent = t;
+      tagsEl.appendChild(el);
+    });
+  }
+  const sb  = q('success-box'); if (sb) sb.classList.remove('show');
+  const btn = q('btn-submit');  if (btn) { btn.disabled = false; btn.textContent = '🛒 Post to eBay — Buy It Now'; }
+}
+
+function rebuildListingPrice() {
+  if (!S.prices||!S.card) return;
+  const price=S.prices.market??0;
+  const listPrice=(price*(1+getMarkup())).toFixed(2);
+  setText('l-price','$'+listPrice);
+  setText('listing-card-price','$'+listPrice);
+}
+
+async function submitListing() {
+  if (!S.ebay?.connected) {
+    toast('Connect your eBay account first!','err');
+    setTimeout(()=>connectEbay(),600); return;
+  }
+  const btn=q('btn-submit');
+  btn.disabled=true; btn.textContent='⏳ Submitting to eBay…';
+  try {
+    const price = parseFloat(q('l-price')?.textContent?.replace('$','')||0);
+    const data = await api('POST','/api/listings/create',{
+      cardId:    S.card.id,
+      condition: S.condition,
+      language:  S.language,
+      price,
+      title:       q('l-title')?.value,
+      description: q('l-desc')?.value,
+    });
+    // Save listing locally
+    S.listings.push({
+      uid:Date.now(), cardId:S.card.id, name:S.card.name,
+      img:S.card.img, condition:S.condition, language:S.language,
+      price, ebayListingId:data.ebayListingId, status:'live', createdAt:Date.now(),
+    });
+    save(); updateUserUI(); renderRecents();
+    q('success-box').classList.add('show');
+    setText('success-id',`SKU: ${data.sku} · Listing ID: ${data.ebayListingId}`);
+    const link=q('ebay-listing-link');
+    if(link&&data.ebayUrl){link.href=data.ebayUrl;link.style.display='block';}
+    btn.textContent='✅ Listed on eBay!';
+    toast('Listed on eBay! 🎉','ok');
+  } catch(e) {
+    btn.disabled=false; btn.textContent='🛒 Post to eBay — Buy It Now';
+    toast('Listing failed: '+(e.data?.detail||e.message),'err');
+  }
+}
+
+function renderRecents() {
+  const el=q('recent-list'); if(!el)return;
+  const items=[...S.listings].reverse().slice(0,5);
+  if(!items.length){el.innerHTML='<div style="text-align:center;color:var(--muted);font-size:14px;padding:24px 0">Scan a card to get started ⚡</div>';return;}
+  el.innerHTML=items.map(r=>`
+    <div class="recent-card">
+      <img class="recent-thumb" src="${r.img||''}" alt="${r.name}" onerror="this.style.display='none'">
+      <div style="flex:1;min-width:0"><div class="recent-name">${r.name}</div><div class="recent-meta">${r.condition} · ${r.language}</div></div>
+      <div class="recent-price">$${r.price.toFixed(2)}</div>
+      <div class="lbadge lbadge-${r.status}">${r.status}</div>
+    </div>`).join('');
+}
+
+function copyPayload() {
+  if (!S.card) return;
+  const price    = S.prices?.market ?? 0;
+  const setTotal = S.card.set?.total || '';
+  const payload  = {
+    endpoint:   'PUT /sell/inventory/v1/inventory_item/{sku}',
+    sku:        'PKM-' + S.card.id + '-' + Date.now(),
+    product: {
+      title:       q('l-title')?.value,
+      description: q('l-desc')?.value,
+      imageUrls:   [S.card.img],
+      aspects: {
+        'Card Name': [S.card.name],
+        'Set':       [S.card.set?.name || ''],
+        'Number':    [`${S.card.number}${setTotal ? '/'+setTotal : ''}`],
+        'Rarity':    [S.card.rarity || ''],
+        'Language':  [S.language],
+        'Game':      ['Pokémon TCG'],
+      },
+    },
+    condition:    S.condition === 'Near Mint' || S.condition === 'Mint' ? 'LIKE_NEW' : 'GOOD',
+    availability: { shipToLocationAvailability: { quantity: 1 } },
+    offer: {
+      price:      { value: (price * (1 + getMarkup())).toFixed(2), currency: 'USD' },
+      format:     'FIXED_PRICE',
+      categoryId: '183454',
+    },
+  };
+  navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+    .then(() => toast('JSON copied!', 'ok'))
+    .catch(() => toast('Copy failed — check browser permissions'));
+}
+
+// ════════════════════════════════════════════════════
+// MODALS
+// ════════════════════════════════════════════════════
+function openModal(id){q(id).classList.add('show')}
+function closeModal(id){q(id).classList.remove('show')}
+
+// ════════════════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════════════════
+function q(id){return document.getElementById(id)}
+function setText(id,val){const el=q(id);if(el)el.textContent=val}
+function wait(ms){return new Promise(r=>setTimeout(r,ms))}
+function setLoading(btnId,loading,label){const b=q(btnId);if(b){b.disabled=loading;b.textContent=label}}
+let _tt;
+function toast(msg,type=''){
+  const t=q('toast');t.textContent=msg;
+  t.className='show'+(type?' '+type:'');
+  clearTimeout(_tt);_tt=setTimeout(()=>t.className='',3500);
+}
+
+// ════════════════════════════════════════════════════
+// ANDROID
+// ════════════════════════════════════════════════════
+document.addEventListener('touchend',e=>{
+  if(e.target.closest('button,.pill,.nav-btn,.coll-card,.recent-card'))e.preventDefault();
+},{passive:false});
+window.addEventListener('popstate',()=>{
+  const app=q('pg-app');
+  if(app?.classList.contains('active')){
+    const active=document.querySelector('.tab-content[style*="flex"]');
+    if(active?.id==='tab-result'){gotoTab('scan');return}
+    if(active?.id==='tab-listing'){gotoTab('result');return}
+    if(active?.id!=='tab-home'){gotoTab('home');return}
+  }
+});
+history.pushState({},'');
+
+// ════════════════════════════════════════════════════
+// GSI FALLBACK DETECTION
+// ════════════════════════════════════════════════════
+window.addEventListener('load',()=>{
+  setTimeout(()=>{
+    const gsi=document.querySelector('.g_id_signin');
+    if(!gsi||!gsi.querySelector('iframe'))
+      q('btn-google-fallback').style.display='flex';
+  },2500);
+});
+
+// ════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  load();
+  // Wake backend if needed (Render cold start)
+  await ensureBackendAwake();
+  if (S.token && S.user) {
+    // Re-validate token with backend
+    try {
+      const me = await api('GET', '/auth/me');
+      S.user = me.user;
+      if (me.ebay) S.ebay = me.ebay;
+      save();
+    } catch(e) {
+      // Token expired — force re-login
+      if (e.status===401) { S.token=null; S.user=null; save(); }
+    }
+    if (S.token) {
+      checkUrlParams();
+      updateUserUI(); updateEbayUI();
+      renderCollection(); renderRecents();
+      showPage('pg-app'); gotoTab('home');
+      // Sync collection from server in background
+      loadCollectionFromApi();
+      return;
+    }
+  }
+  checkUrlParams();
+  showPage('pg-auth');
+});
+</script>
+</body>
+</html>
