@@ -428,7 +428,9 @@ textarea.inp{resize:none}
       <div class="hdr-badge" style="margin-left:auto">SCANNER</div>
     </div>
     <div class="scroll">
-      <div class="cam-zone" id="cam-zone" onclick="triggerFile()">
+
+      <!-- Camera zone -->
+      <div class="cam-zone" id="cam-zone">
         <video id="cam-video" autoplay playsinline muted></video>
         <img id="cam-img" alt="card">
         <div class="bracket tl"></div><div class="bracket tr"></div>
@@ -436,28 +438,52 @@ textarea.inp{resize:none}
         <div class="scan-beam" id="scan-beam"></div>
         <div class="cam-ui" id="cam-ui">
           <div class="cam-ui-icon">📷</div>
-          <div class="cam-ui-hint">Tap to photograph your card<br><span style="color:var(--muted);font-size:11px">or search by name below</span></div>
+          <div class="cam-ui-hint">Point camera at your card<br><span style="color:var(--muted);font-size:11px">or search by name below</span></div>
+        </div>
+        <!-- Camera controls overlay -->
+        <div id="cam-controls" style="display:none;position:absolute;bottom:14px;left:0;right:0;z-index:4;display:none;justify-content:center;gap:12px">
+          <button onclick="captureFrame()" style="background:var(--gold);border:none;border-radius:50%;width:56px;height:56px;font-size:24px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4)">📸</button>
+          <button onclick="stopCamera()" style="background:var(--s3);border:1px solid var(--border);border-radius:50%;width:44px;height:44px;font-size:18px;cursor:pointer;margin-top:6px">✕</button>
         </div>
       </div>
-      <input type="file" id="file-in" accept="image/*" capture="environment" onchange="onFile(event)">
 
-      <!-- Manual search fallback -->
-      <div>
-        <div class="sec-lbl">Or search by card name</div>
-        <div class="search-row">
-          <input class="inp" id="search-inp" type="text" placeholder="e.g. Charizard V" autocomplete="off" onkeydown="if(event.key==='Enter')searchCards()">
-          <button class="btn btn-ghost btn-sm" onclick="searchCards()">Search</button>
-        </div>
-        <div id="search-results" class="search-results" style="margin-top:10px"></div>
+      <!-- Action buttons -->
+      <div class="btn-row">
+        <button class="btn btn-ghost btn-sm" onclick="startCamera()" id="btn-camera">📷 Camera</button>
+        <button class="btn btn-ghost btn-sm" onclick="triggerFile()">📁 Upload Photo</button>
       </div>
+      <input type="file" id="file-in" accept="image/*" onchange="onFile(event)">
 
+      <!-- Identify button — shows after photo taken -->
       <div id="scan-actions" style="display:none;flex-direction:column;gap:10px">
         <div id="scan-loading" class="spin-wrap" style="display:none">
           <div class="spinner"></div>
           <div class="spin-lbl" id="scan-loading-msg">Identifying card...</div>
         </div>
         <button class="btn btn-gold" id="btn-identify" onclick="identifyCard()">🔍 Identify This Card</button>
+        <button class="btn btn-ghost btn-sm" style="width:100%" onclick="resetScanner()">↺ Try Again</button>
       </div>
+
+      <!-- Live search -->
+      <div>
+        <div class="sec-lbl">Search by card name</div>
+        <div class="search-row">
+          <input class="inp" id="search-inp" type="text"
+            placeholder="e.g. Charizard"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+            inputmode="search"
+            oninput="onSearchInput()"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();doSearch()}">
+          <button class="btn btn-ghost btn-sm" onclick="doSearch()">Search</button>
+        </div>
+        <!-- Live suggestions dropdown -->
+        <div id="search-suggestions" style="display:none;flex-direction:column;gap:0;margin-top:6px;background:var(--s1);border:1px solid var(--border);border-radius:14px;overflow:hidden"></div>
+        <!-- Full results grid -->
+        <div id="search-results" class="search-results" style="margin-top:10px"></div>
+      </div>
+
       <div class="spacer"></div>
     </div>
   </div>
@@ -516,6 +542,34 @@ textarea.inp{resize:none}
           </div>
         </div>
       </div>
+      <!-- Affiliate links -->
+      <div id="affiliate-links" style="display:none;flex-direction:column;gap:8px">
+        <div class="sec-lbl">View & Buy</div>
+        <div style="display:flex;gap:8px">
+          <a id="tcg-link" href="#" target="_blank" rel="noopener" style="
+            flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
+            padding:12px;border-radius:14px;text-decoration:none;
+            background:rgba(255,255,255,.05);border:1px solid var(--border);
+            font-family:'Barlow Semi Condensed',sans-serif;font-size:14px;font-weight:600;color:var(--text);
+            transition:border-color .15s">
+            <img src="https://www.tcgplayer.com/favicon.ico" width="16" height="16" onerror="this.style.display='none'">
+            TCGPlayer
+          </a>
+          <a id="ebay-search-link" href="#" target="_blank" rel="noopener" style="
+            flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
+            padding:12px;border-radius:14px;text-decoration:none;
+            background:rgba(0,100,210,.1);border:1px solid rgba(0,100,210,.3);
+            font-family:'Barlow Semi Condensed',sans-serif;font-size:14px;font-weight:600;color:#60a5fa;
+            transition:border-color .15s">
+            <span style="font-size:16px">🛒</span>
+            eBay Listings
+          </a>
+        </div>
+        <div style="font-size:10px;color:var(--muted);text-align:center;font-family:'Barlow Semi Condensed',sans-serif">
+          Links may earn affiliate commission at no cost to you
+        </div>
+      </div>
+
       <div class="spacer"></div>
     </div>
     <div class="bbar">
@@ -545,6 +599,25 @@ textarea.inp{resize:none}
             <div class="listing-preview-meta" id="listing-card-meta">—</div>
           </div>
           <div class="listing-preview-price" id="listing-card-price">—</div>
+        </div>
+
+        <!-- Multi-photo upload strip -->
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--s2)">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;margin-bottom:8px">
+            Listing Photos <span style="color:var(--muted);font-weight:400">(up to 12)</span>
+          </div>
+          <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px" id="photo-strip">
+            <!-- Photos injected here by JS -->
+          </div>
+          <input type="file" id="photo-file-in" accept="image/*" multiple onchange="onListingPhotos(event)" style="display:none">
+          <button onclick="q('photo-file-in').click()" style="
+            margin-top:8px;width:100%;padding:9px;border-radius:10px;
+            background:transparent;border:1px dashed var(--border2);
+            color:var(--sub);font-size:13px;font-family:'Barlow Semi Condensed',sans-serif;
+            font-weight:600;cursor:pointer;transition:border-color .15s"
+            id="btn-add-photos">
+            + Add Photos of Your Card
+          </button>
         </div>
         <div class="l-body">
           <div class="l-field">
@@ -744,7 +817,7 @@ textarea.inp{resize:none}
 // ════════════════════════════════════════════════════
 // CONFIG
 // ════════════════════════════════════════════════════
-const API = 'https://pokelist-backend-a68l.onrender.com';
+const API = 'https://pokelist-9buy.onrender.com';
 const GOOGLE_CLIENT_ID = '307869454488-arifvst6vsculgqqmnt3hu44jvemecmt.apps.googleusercontent.com';
 
 // ════════════════════════════════════════════════════
@@ -758,6 +831,7 @@ let S = {
   language: 'English',
   prices: null,
   collection: [], listings: [],
+  listingPhotos: [],
   scansTotal: 0,
   activeCollCard: null,
 };
@@ -984,7 +1058,6 @@ function connectEbay() { openModal('modal-ebay'); }
 function doEbayOAuth() {
   closeModal('modal-ebay');
   if (!S.token) { toast('Sign in first.', 'err'); return; }
-  // Redirect to backend OAuth start — backend reads token from query param
   window.location.href = `${API}/auth/ebay/connect?token=${encodeURIComponent(S.token)}`;
 }
 
@@ -1006,10 +1079,83 @@ function updateEbayUI() {
 }
 
 // ════════════════════════════════════════════════════
-// FILE INPUT & CAMERA
+// CAMERA — getUserMedia live viewfinder
+// ════════════════════════════════════════════════════
+let _cameraStream = null;
+
+async function startCamera() {
+  const video = q('cam-video');
+  const controls = q('cam-controls');
+  try {
+    _cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+    video.srcObject = _cameraStream;
+    video.style.display = 'block';
+    q('cam-ui').classList.add('hide');
+    q('scan-beam').style.display = 'block';
+    if (controls) { controls.style.display = 'flex'; }
+    q('cam-zone').classList.add('live');
+    q('btn-camera').textContent = '⏹ Stop';
+    q('btn-camera').onclick = stopCamera;
+  } catch (err) {
+    // Camera permission denied or not available — fall back to file picker
+    toast('Camera not available — use Upload Photo instead', 'err');
+    triggerFile();
+  }
+}
+
+function captureFrame() {
+  const video = q('cam-video');
+  if (!video.srcObject) return;
+  // Draw current video frame to a canvas, convert to blob
+  const canvas = document.createElement('canvas');
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  canvas.toBlob(blob => {
+    if (!blob) { toast('Could not capture frame', 'err'); return; }
+    S._imageFile = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    S.cardImgSrc = url;
+    showCamPreview(url);
+    stopCamera();
+    const sa = q('scan-actions');
+    sa.style.display = 'flex'; sa.style.flexDirection = 'column';
+  }, 'image/jpeg', 0.92);
+}
+
+function stopCamera() {
+  if (_cameraStream) {
+    _cameraStream.getTracks().forEach(t => t.stop());
+    _cameraStream = null;
+  }
+  const video = q('cam-video');
+  video.srcObject = null;
+  const controls = q('cam-controls');
+  if (controls) controls.style.display = 'none';
+  q('scan-beam').style.display = 'none';
+  const btn = q('btn-camera');
+  if (btn) { btn.textContent = '📷 Camera'; btn.onclick = startCamera; }
+}
+
+function resetScanner() {
+  stopCamera();
+  const img = q('cam-img');
+  img.src = ''; img.style.display = 'none';
+  q('cam-ui').classList.remove('hide');
+  q('scan-beam').style.display = 'block';
+  q('cam-zone').classList.remove('live');
+  q('scan-actions').style.display = 'none';
+  S._imageFile = null; S.cardImgSrc = null;
+}
+
+// ════════════════════════════════════════════════════
+// FILE INPUT
 // ════════════════════════════════════════════════════
 function triggerFile() {
-  const fi = q('file-in'); fi.value=''; fi.click();
+  const fi = q('file-in'); fi.value = ''; fi.click();
 }
 function onFile(e) {
   const f = e.target.files[0]; if (!f) return;
@@ -1019,65 +1165,146 @@ function onFile(e) {
     S._imageFile = f;
     showCamPreview(ev.target.result);
     const sa = q('scan-actions');
-    sa.style.display='flex'; sa.style.flexDirection='column';
+    sa.style.display = 'flex'; sa.style.flexDirection = 'column';
     q('btn-identify').onclick = identifyCard;
   };
   reader.readAsDataURL(f);
 }
 function showCamPreview(src) {
   const img = q('cam-img');
-  img.src=src; img.style.display='block';
+  img.src = src; img.style.display = 'block';
   q('cam-ui').classList.add('hide');
-  q('scan-beam').style.display='none';
+  q('scan-beam').style.display = 'none';
   q('cam-zone').classList.add('live');
 }
 
 // ════════════════════════════════════════════════════
-// CARD SEARCH (manual fallback via TCGdex API — free, no key)
+// LIVE SEARCH — suggestions as you type
 // ════════════════════════════════════════════════════
-async function searchCards() {
-  const q_val = q('search-inp').value.trim();
-  if (!q_val) return;
-  const resultsEl = q('search-results');
-  resultsEl.innerHTML = '<div class="spin-wrap" style="padding:12px 0"><div class="spinner"></div></div>';
+let _searchTimer = null;
+let _lastQuery = '';
+
+function onSearchInput() {
+  const val = q('search-inp').value.trim();
+  clearTimeout(_searchTimer);
+  if (val.length < 2) {
+    q('search-suggestions').style.display = 'none';
+    q('search-suggestions').innerHTML = '';
+    return;
+  }
+  // Debounce 350ms so we don't fire on every keystroke
+  _searchTimer = setTimeout(() => fetchSuggestions(val), 350);
+}
+
+async function fetchSuggestions(query) {
+  if (query === _lastQuery) return;
+  _lastQuery = query;
+  const sugEl = q('search-suggestions');
+  sugEl.style.display = 'flex';
+  sugEl.innerHTML = '<div class="spin-wrap" style="padding:10px 0"><div class="spinner" style="width:24px;height:24px;border-width:2px"></div></div>';
   try {
-    const data = await api('GET', `/api/cards/search?q=${encodeURIComponent(q_val)}`);
+    const data = await api('GET', `/api/cards/search?q=${encodeURIComponent(query)}`);
     if (!data.cards?.length) {
-      resultsEl.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:10px 0">No cards found. Try a different name.</div>';
+      sugEl.innerHTML = '<div style="padding:12px 14px;color:var(--muted);font-size:13px">No cards found</div>';
       return;
     }
-    resultsEl.innerHTML = data.cards.slice(0,5).map((c,i) => `
-      <div class="search-result-item" onclick="selectCard(${i})">
-        <img class="search-result-img" src="${c.img}" alt="${c.name}" onerror="this.style.display='none'">
-        <div>
-          <div class="search-result-name">${c.name}</div>
-          <div class="search-result-meta">${c.set.name} · #${c.number} · ${c.rarity}</div>
+    // Group by name so "Charizard" shows all variants together
+    sugEl.innerHTML = data.cards.slice(0, 15).map((c, i) => `
+      <div onclick="selectCard(${i})" style="
+        display:flex;align-items:center;gap:10px;
+        padding:10px 14px;cursor:pointer;
+        border-bottom:1px solid var(--border);
+        transition:background .1s;
+      " onmouseenter="this.style.background='var(--s2)'"
+         onmouseleave="this.style.background=''"
+         ontouchstart="this.style.background='var(--s2)'"
+         ontouchend="this.style.background=''">
+        <img src="${c.img}" style="width:32px;height:44px;object-fit:contain;border-radius:4px;background:var(--s2);flex-shrink:0"
+          onerror="this.style.display='none'">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
+          <div style="font-size:11px;color:var(--sub)">${c.set?.name || ''} · #${c.number || ''}${c.rarity ? ' · ' + c.rarity : ''}</div>
         </div>
+        <div style="font-size:11px;color:var(--muted);flex-shrink:0">→</div>
       </div>`).join('');
-    // Store results temporarily
     window._searchResults = data.cards;
+  } catch(e) {
+    sugEl.innerHTML = `<div style="padding:12px 14px;color:var(--red);font-size:13px">${e.message}</div>`;
+  }
+}
+
+async function doSearch() {
+  const val = q('search-inp').value.trim();
+  if (!val) return;
+  clearTimeout(_searchTimer);
+  _lastQuery = '';
+  q('search-suggestions').style.display = 'none';
+  const resultsEl = q('search-results');
+  resultsEl.innerHTML = '<div class="spin-wrap"><div class="spinner"></div></div>';
+  try {
+    const data = await api('GET', `/api/cards/search?q=${encodeURIComponent(val)}`);
+    window._searchResults = data.cards || [];
+    if (!data.cards?.length) {
+      resultsEl.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:10px 0;text-align:center">No cards found. Try a different name.</div>';
+      return;
+    }
+    resultsEl.innerHTML = `
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-family:\'Barlow Semi Condensed\',sans-serif">${data.cards.length} results for "${val}"</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${data.cards.slice(0, 20).map((c, i) => `
+          <div onclick="selectCard(${i})" style="
+            background:var(--s1);border:1px solid var(--border);border-radius:12px;
+            overflow:hidden;cursor:pointer;transition:border-color .15s
+          ">
+            <div style="background:var(--s2);padding:10px;display:flex;align-items:center;justify-content:center;height:100px">
+              <img src="${c.img}" style="max-height:90px;max-width:100%;object-fit:contain;border-radius:4px"
+                onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2284%22><rect fill=%22%231d1d38%22 width=%2260%22 height=%2284%22 rx=%225%22/><text fill=%22%234a4a78%22 x=%2230%22 y=%2248%22 text-anchor=%22middle%22 font-size=%2224%22>🃏</text></svg>'">
+            </div>
+            <div style="padding:8px">
+              <div style="font-size:13px;font-weight:700;font-family:\'Barlow Condensed\',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
+              <div style="font-size:10px;color:var(--sub);margin-top:2px">${c.set?.name || ''}</div>
+              <div style="font-size:10px;color:var(--muted)">#${c.number || ''}${c.rarity ? ' · ' + c.rarity : ''}</div>
+            </div>
+          </div>`).join('')}
+      </div>`;
   } catch(e) {
     resultsEl.innerHTML = `<div style="color:var(--red);font-size:13px;padding:10px 0">${e.message}</div>`;
   }
 }
 
+// Dismiss suggestions when tapping outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('#search-inp') && !e.target.closest('#search-suggestions')) {
+    const el = q('search-suggestions');
+    if (el) { el.style.display = 'none'; }
+  }
+});
+
+// ════════════════════════════════════════════════════
+// SELECT CARD from search results
+// ════════════════════════════════════════════════════
 async function selectCard(idx) {
-  const brief = window._searchResults?.[idx]; if (!brief) return;
-  q('search-results').innerHTML = '<div class="spin-wrap" style="padding:12px 0"><div class="spinner"></div></div>';
+  const brief = window._searchResults?.[idx];
+  if (!brief) return;
+  // Dismiss search UI
+  q('search-suggestions').style.display = 'none';
+  q('search-results').innerHTML = '';
+  q('search-inp').value = '';
+  _lastQuery = '';
+  // Show loading
+  q('search-results').innerHTML = '<div class="spin-wrap"><div class="spinner"></div><div class="spin-lbl">Loading card...</div></div>';
   try {
-    // Fetch full card (with pricing) from backend
     const card = await api('GET', `/api/cards/${encodeURIComponent(brief.id)}`);
     S.card = card;
     S.cardImgSrc = card.img;
     showCamPreview(card.img);
     q('search-results').innerHTML = '';
-    q('search-inp').value = '';
     renderResult();
     await fetchPrices();
     gotoTab('result');
   } catch(e) {
-    toast('Could not load card: '+e.message, 'err');
     q('search-results').innerHTML = '';
+    toast('Could not load card: ' + e.message, 'err');
   }
 }
 
@@ -1146,6 +1373,8 @@ function renderResult() {
     el.textContent = p.l;
     tags.appendChild(el);
   });
+  // Show affiliate links for this card
+  updateAffiliateLinks();
 }
 
 // ════════════════════════════════════════════════════
@@ -1358,12 +1587,115 @@ function renderPortfolio() {
 }
 
 // ════════════════════════════════════════════════════
-// LISTING — eBay API call with TCGdex pricing
+// AFFILIATE LINKS
 // ════════════════════════════════════════════════════
+// ── Replace these with your actual affiliate IDs ──
+// TCGPlayer:  Sign up at tcgplayer.com/affiliates
+//             Replace YOUR_TCG_AFFILIATE_ID below
+// eBay:       Sign up at partnernetwork.ebay.com
+//             Replace YOUR_EBAY_CAMPAIGN_ID below
+const TCG_AFFILIATE_ID  = 'YOUR_TCG_AFFILIATE_ID';   // e.g. "12345"
+const EBAY_CAMPAIGN_ID  = 'YOUR_EBAY_CAMPAIGN_ID';   // e.g. "5338967145"
+const EBAY_AFFILIATE_ID = 'YOUR_EBAY_AFFILIATE_ID';  // e.g. "5574907395"
+
+function buildTCGLink(cardName, setName) {
+  const search = encodeURIComponent(`${cardName} ${setName||''}`.trim());
+  const base   = `https://www.tcgplayer.com/search/pokemon/product?q=${search}&view=grid`;
+  // TCGPlayer affiliate link format
+  if (TCG_AFFILIATE_ID !== 'YOUR_TCG_AFFILIATE_ID') {
+    return `https://tcgplayer.pxf.io/c/${TCG_AFFILIATE_ID}/1/pokemon?u=${encodeURIComponent(base)}`;
+  }
+  return base;
+}
+
+function buildEbayLink(cardName, setName, number) {
+  const query  = encodeURIComponent(`${cardName} ${setName||''} ${number||''} pokemon card`.trim());
+  const base   = `https://www.ebay.com/sch/i.html?_nkw=${query}&_sacat=183454&LH_BIN=1&_sop=15`;
+  // eBay Partner Network affiliate link format
+  if (EBAY_CAMPAIGN_ID !== 'YOUR_EBAY_CAMPAIGN_ID') {
+    return `https://rover.ebay.com/rover/1/${EBAY_CAMPAIGN_ID}-${EBAY_AFFILIATE_ID}-1/1?icep_id=114&ipn=icep&toolid=20004&campid=${EBAY_CAMPAIGN_ID}&mpre=${encodeURIComponent(base)}`;
+  }
+  return base;
+}
+
+function updateAffiliateLinks() {
+  const c = S.card; if (!c) return;
+  const linksEl = q('affiliate-links');
+  if (!linksEl) return;
+  linksEl.style.display = 'flex';
+  const tcgEl   = q('tcg-link');
+  const ebayEl  = q('ebay-search-link');
+  if (tcgEl)  tcgEl.href  = buildTCGLink(c.name, c.set?.name);
+  if (ebayEl) ebayEl.href = buildEbayLink(c.name, c.set?.name, c.number);
+}
+
+// ════════════════════════════════════════════════════
+// LISTING PHOTOS
+// ════════════════════════════════════════════════════
+// S.listingPhotos holds { file, url } objects
+// Index 0 is always the TCGdex card image (read-only)
+// Indexes 1+ are user-added photos
+
+function initListingPhotos() {
+  // Reset to just the card image
+  const cardImgUrl = S.card?.img || '';
+  S.listingPhotos = cardImgUrl ? [{ file: null, url: cardImgUrl, isTCG: true }] : [];
+  renderPhotoStrip();
+}
+
+function onListingPhotos(e) {
+  const files = Array.from(e.target.files).slice(0, 12 - S.listingPhotos.length);
+  files.forEach(file => {
+    const url = URL.createObjectURL(file);
+    S.listingPhotos.push({ file, url, isTCG: false });
+  });
+  e.target.value = ''; // reset so same file can be added again
+  renderPhotoStrip();
+  toast(`${files.length} photo${files.length>1?'s':''} added`, 'ok');
+}
+
+function removeListingPhoto(idx) {
+  if (S.listingPhotos[idx]?.isTCG) return; // can't remove the card image
+  URL.revokeObjectURL(S.listingPhotos[idx]?.url);
+  S.listingPhotos.splice(idx, 1);
+  renderPhotoStrip();
+}
+
+function renderPhotoStrip() {
+  const strip  = q('photo-strip'); if (!strip) return;
+  const addBtn = q('btn-add-photos');
+  const photos = S.listingPhotos || [];
+  const remaining = 12 - photos.length;
+
+  strip.innerHTML = photos.map((p, i) => `
+    <div style="position:relative;flex-shrink:0">
+      <img src="${p.url}" style="
+        width:64px;height:64px;object-fit:cover;border-radius:8px;
+        border:2px solid ${p.isTCG ? 'var(--gold)' : 'var(--border)'};
+        display:block">
+      ${p.isTCG ? `<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:8px;color:var(--gold);background:rgba(0,0,0,.6);border-radius:0 0 6px 6px;padding:1px">TCGdex</div>` : ''}
+      ${!p.isTCG ? `<button onclick="removeListingPhoto(${i})" style="
+        position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
+        background:var(--red);border:none;color:#fff;font-size:10px;cursor:pointer;
+        display:flex;align-items:center;justify-content:center;line-height:1">✕</button>` : ''}
+    </div>`).join('');
+
+  if (addBtn) {
+    addBtn.style.display = remaining > 0 ? 'block' : 'none';
+    addBtn.textContent   = remaining > 0 ? `+ Add Photos of Your Card (${remaining} remaining)` : 'Max 12 photos reached';
+  }
+}
+
+// Get all photo URLs to send to eBay listing API
+function getListingImageUrls() {
+  return (S.listingPhotos || []).map(p => p.url).filter(Boolean);
+}
 function getMarkup() { return (parseFloat(q('markup-pct')?.value)||10)/100; }
 
 function buildListing() {
   if (!S.card) return;
+  // Initialise photo strip — slot 0 = TCGdex card art, slots 1-11 = user photos
+  initListingPhotos();
   const c = S.card;
   const price    = S.prices?.market ?? 0;
   const markup   = getMarkup();
@@ -1436,12 +1768,13 @@ async function submitListing() {
   try {
     const price = parseFloat(q('l-price')?.textContent?.replace('$','')||0);
     const data = await api('POST','/api/listings/create',{
-      cardId:    S.card.id,
-      condition: S.condition,
-      language:  S.language,
+      cardId:      S.card.id,
+      condition:   S.condition,
+      language:    S.language,
       price,
       title:       q('l-title')?.value,
       description: q('l-desc')?.value,
+      imageUrls:   getListingImageUrls(), // TCGdex image + user photos
     });
     // Save listing locally
     S.listings.push({
