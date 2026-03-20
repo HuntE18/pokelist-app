@@ -1636,8 +1636,14 @@ function setLang(lang) {
 }
 
 // ════════════════════════════════════════════════════
-// FETCH PRICES — reads TCGdex pricing already on card,
-// falls back to backend API if pricing not embedded.
+// FETCH PRICES — reads TCGdex pricing from card object
+// Real field names from TCGdex docs:
+//   tcgplayer.normal.marketPrice / .lowPrice / .midPrice / .highPrice
+//   tcgplayer.holo.marketPrice   (holo variant)
+//   cardmarket.avg               (EUR average sell)
+//   cardmarket.low               (EUR low)
+//   cardmarket.trend             (EUR trend)
+//   cardmarket.avg1 / avg7 / avg30
 // ════════════════════════════════════════════════════
 async function fetchPrices() {
   if (!S.card) return;
@@ -1645,7 +1651,6 @@ async function fetchPrices() {
   spin.style.display = 'flex'; body.style.display = 'none';
 
   try {
-    // TCGdex embeds pricing in the card object — use it directly
     const pricing  = S.card.pricing;
     const tcp      = pricing?.tcgplayer;
     const cm       = pricing?.cardmarket;
@@ -1654,21 +1659,26 @@ async function fetchPrices() {
 
     let p = null;
 
-    if (tcp?.market || cm?.averageSellPrice) {
-      const base   = tcp?.market || (cm.averageSellPrice * 1.08);
+    // TCGdex actual structure: tcgplayer.normal.marketPrice or tcgplayer.holo.marketPrice
+    const tcpVariant = tcp?.holo || tcp?.normal || tcp?.reverse || null;
+    const usdBase    = tcpVariant?.marketPrice || tcpVariant?.midPrice || null;
+    const eurBase    = cm?.avg ? cm.avg * 1.08 : null;
+    const base       = usdBase || eurBase;
+
+    if (base) {
       const market = +(base * condMult * langMult).toFixed(2);
-      const low    = +((tcp?.low  || base * 0.80) * condMult * langMult).toFixed(2);
-      const mid    = +((tcp?.mid  || base        ) * condMult * langMult).toFixed(2);
-      const high   = +((tcp?.high || base * 1.30) * condMult * langMult).toFixed(2);
-      // Trend from Cardmarket 1-day vs 7-day
+      const low    = +((tcpVariant?.lowPrice  || base * 0.75) * condMult * langMult).toFixed(2);
+      const mid    = +((tcpVariant?.midPrice  || base        ) * condMult * langMult).toFixed(2);
+      const high   = +((tcpVariant?.highPrice || base * 1.35) * condMult * langMult).toFixed(2);
+      // Cardmarket trend: avg1 (1-day) vs avg7 (7-day)
       let trend = null;
-      if (cm?.avg1Day && cm?.avg7Days) {
-        const pct  = ((cm.avg1Day - cm.avg7Days) / cm.avg7Days) * 100;
+      if (cm?.avg1 && cm?.avg7 && cm.avg7 !== 0) {
+        const pct = ((cm.avg1 - cm.avg7) / cm.avg7) * 100;
         trend = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
       }
       p = { market, low, mid, high, trend };
     } else if (S.token) {
-      // Fall back to backend (which also reads TCGdex pricing)
+      // Fall back to backend API which fetches the full card with pricing
       p = await api('GET', `/api/prices?cardId=${S.card.id}&condition=${encodeURIComponent(S.condition)}&language=${encodeURIComponent(S.language)}`);
     }
 
