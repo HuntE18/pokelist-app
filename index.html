@@ -312,8 +312,8 @@ textarea.inp{resize:none}
 <!-- ══════ WAKE SCREEN (Render cold start) ══════ -->
 <div class="page hidden" id="pg-wake">
   <div class="wake-spinner"></div>
-  <div class="wake-msg">Starting up…</div>
-  <div class="wake-sub">Free hosting wakes after idle periods. This takes about 30 seconds.</div>
+  <div class="wake-msg">Waking up server…</div>
+  <div class="wake-sub">Free hosting sleeps after inactivity. This takes 20–30 seconds — only happens on first visit of the day.</div>
 </div>
 
 <!-- ══════ AUTH ══════ -->
@@ -905,25 +905,34 @@ async function api(method, path, body, isFormData = false) {
 async function pingBackend() {
   try {
     const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 3000);
+    // 8 second timeout per ping — Render needs time to wake
+    const tid = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(API + '/health', { signal: controller.signal });
     clearTimeout(tid);
     return res.ok;
   } catch(e) { return false; }
 }
 
+// Track whether the backend is confirmed awake
+let _backendReady = false;
+
 async function ensureBackendAwake() {
+  if (_backendReady) return;
   const alive = await pingBackend();
-  if (alive) return;
+  if (alive) { _backendReady = true; return; }
   // Show wake screen while polling
   showPage('pg-wake');
   let attempts = 0;
-  while (attempts < 20) {
-    await wait(3000);
+  while (attempts < 15) {
+    await wait(4000);
     attempts++;
-    if (await pingBackend()) return;
+    if (await pingBackend()) {
+      _backendReady = true;
+      return;
+    }
   }
-  // If still down after 60s, show auth anyway
+  // Still show auth after 60s even if backend didn't respond
+  // The actual API calls will show their own errors
 }
 
 // ════════════════════════════════════════════════════
@@ -958,13 +967,23 @@ function gotoTab(name) {
 // GOOGLE SIGN-IN (real — sends credential to backend)
 // ════════════════════════════════════════════════════
 async function handleGoogleCredential(response) {
+  // If backend isn't ready yet, wait for it first
+  // This handles the case where user taps Google sign-in
+  // before the backend has fully woken from sleep
+  if (!_backendReady) {
+    const signingInMsg = 'Connecting to server…';
+    setLoading('btn-login', true, signingInMsg);
+    await ensureBackendAwake();
+  }
   setLoading('btn-login', true, 'Signing in…');
   try {
-    // Send ID token to backend for server-side verification
     const data = await api('POST', '/auth/google', { credential: response.credential });
     loginUser(data.token, data.user);
   } catch(e) {
-    toast('Google sign-in failed: ' + e.message, 'err');
+    // Surface the real error
+    const msg = e.message || 'Unknown error';
+    toast('Google sign-in failed: ' + msg, 'err');
+    console.error('Google auth error:', e);
   } finally {
     setLoading('btn-login', false, 'Sign In');
   }
@@ -990,10 +1009,11 @@ async function emailLogin() {
   err.classList.remove('show');
   setLoading('btn-login', true, 'Signing in…');
   try {
+    if (!_backendReady) await ensureBackendAwake();
     const data = await api('POST', '/auth/login', { email, password: pass });
     loginUser(data.token, data.user);
   } catch(e) {
-    err.textContent = e.message || 'Sign in failed.';
+    err.textContent = e.message || 'Sign in failed. Check your connection and try again.';
     err.classList.add('show');
   } finally { setLoading('btn-login', false, 'Sign In'); }
 }
@@ -1010,10 +1030,11 @@ async function emailRegister() {
   err.classList.remove('show');
   setLoading('btn-register', true, 'Creating account…');
   try {
+    if (!_backendReady) await ensureBackendAwake();
     const data = await api('POST', '/auth/register', { name, email, password: pass });
     loginUser(data.token, data.user);
   } catch(e) {
-    err.textContent = e.message || 'Registration failed.';
+    err.textContent = e.message || 'Registration failed. Try again.';
     err.classList.add('show');
   } finally { setLoading('btn-register', false, 'Create Account'); }
 }
