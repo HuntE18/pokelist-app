@@ -429,58 +429,54 @@ textarea.inp{resize:none}
     </div>
     <div class="scroll">
 
-      <!-- Camera zone -->
+      <!-- Camera zone — always live by default -->
       <div class="cam-zone" id="cam-zone">
         <video id="cam-video" autoplay playsinline muted></video>
         <img id="cam-img" alt="card">
         <div class="bracket tl"></div><div class="bracket tr"></div>
         <div class="bracket bl"></div><div class="bracket br"></div>
         <div class="scan-beam" id="scan-beam"></div>
+        <!-- Idle overlay — hidden once camera starts -->
         <div class="cam-ui" id="cam-ui">
           <div class="cam-ui-icon">📷</div>
-          <div class="cam-ui-hint">Point camera at your card<br><span style="color:var(--muted);font-size:11px">or search by name below</span></div>
+          <div class="cam-ui-hint">Starting camera…</div>
         </div>
-        <!-- Camera controls overlay -->
-        <div id="cam-controls" style="display:none;position:absolute;bottom:14px;left:0;right:0;z-index:4;display:none;justify-content:center;gap:12px">
-          <button onclick="captureFrame()" style="background:var(--gold);border:none;border-radius:50%;width:56px;height:56px;font-size:24px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4)">📸</button>
-          <button onclick="stopCamera()" style="background:var(--s3);border:1px solid var(--border);border-radius:50%;width:44px;height:44px;font-size:18px;cursor:pointer;margin-top:6px">✕</button>
+        <!-- Capture button — shown when camera is live -->
+        <div id="cam-controls" style="display:none;position:absolute;bottom:18px;left:0;right:0;z-index:4;justify-content:center;align-items:center;gap:16px">
+          <button onclick="captureFrame()" style="
+            background:var(--gold);border:none;border-radius:50%;
+            width:64px;height:64px;font-size:28px;cursor:pointer;
+            box-shadow:0 4px 20px rgba(0,0,0,.5);
+            touch-action:manipulation;display:flex;align-items:center;justify-content:center">
+            📸
+          </button>
         </div>
       </div>
 
-      <!-- Action buttons -->
-      <div class="btn-row">
-        <button class="btn btn-ghost btn-sm" onclick="startCamera()" id="btn-camera">📷 Camera</button>
-        <button class="btn btn-ghost btn-sm" onclick="triggerFile()">📁 Upload Photo</button>
-      </div>
-      <input type="file" id="file-in" accept="image/*" onchange="onFile(event)">
-
-      <!-- Identify button — shows after photo taken -->
-      <div id="scan-actions" style="display:none;flex-direction:column;gap:10px">
-        <div id="scan-loading" class="spin-wrap" style="display:none">
-          <div class="spinner"></div>
-          <div class="spin-lbl" id="scan-loading-msg">Identifying card...</div>
-        </div>
-        <button class="btn btn-gold" id="btn-identify" onclick="identifyCard()">🔍 Identify This Card</button>
-        <button class="btn btn-ghost btn-sm" style="width:100%" onclick="resetScanner()">↺ Try Again</button>
+      <!-- Identifying spinner — shown after capture -->
+      <div id="scan-loading" class="spin-wrap" style="display:none">
+        <div class="spinner"></div>
+        <div class="spin-lbl" id="scan-loading-msg">Identifying card…</div>
       </div>
 
-      <!-- Live search -->
+      <!-- Retry button — shown if identify fails -->
+      <div id="scan-retry" style="display:none;flex-direction:column;gap:8px">
+        <button class="btn btn-ghost" onclick="retryCamera()">↺ Try Again</button>
+      </div>
+
+      <!-- Search section -->
       <div>
-        <div class="sec-lbl">Search by card name</div>
+        <div class="sec-lbl">Or search by card name</div>
         <div class="search-row">
           <input class="inp" id="search-inp" type="text"
             placeholder="e.g. Charizard"
-            autocomplete="off"
-            autocorrect="off"
-            spellcheck="false"
+            autocomplete="off" autocorrect="off" spellcheck="false"
             inputmode="search"
             oninput="onSearchInput()"
             onkeydown="if(event.key==='Enter'){event.preventDefault();doSearch()}">
-          <button class="btn btn-ghost btn-sm" onclick="doSearch()">Search</button>
+          <button class="btn btn-ghost btn-sm" onclick="doSearch()" style="touch-action:manipulation">Search</button>
         </div>
-        <!-- Live suggestions dropdown -->
         <div id="search-suggestions" style="display:none;flex-direction:column;gap:0;margin-top:6px;background:var(--s1);border:1px solid var(--border);border-radius:14px;overflow:hidden"></div>
-        <!-- Full results grid -->
         <div id="search-results" class="search-results" style="margin-top:10px"></div>
       </div>
 
@@ -618,6 +614,9 @@ textarea.inp{resize:none}
             id="btn-add-photos">
             + Add Photos of Your Card
           </button>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4">
+            📌 The TCGdex card art uploads automatically. Add your own photos to show the actual card condition — you can also add more photos after listing via eBay's Edit Listing page.
+          </div>
         </div>
         <div class="l-body">
           <div class="l-field">
@@ -914,13 +913,23 @@ function showPage(id) {
   });
 }
 function gotoTab(name) {
+  // Stop camera when leaving scan tab
+  if (name !== 'scan') stopCameraStream();
+
   document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
   const el = q('tab-'+name);
   if (el) { el.style.display = 'flex'; el.style.flexDirection = 'column'; el.style.flex = '1'; }
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.id === 'nav-'+name));
-  if (name === 'listing') buildListing();
-  if (name === 'portfolio') renderPortfolio();
+
+  if (name === 'listing')    buildListing();
+  if (name === 'portfolio')  renderPortfolio();
   if (name === 'collection') renderCollection();
+
+  // Auto-start camera when scan tab opens
+  if (name === 'scan') {
+    // Small delay so the tab is fully visible before requesting camera
+    setTimeout(() => startCamera(), 150);
+  }
 }
 
 // ════════════════════════════════════════════════════
@@ -1079,97 +1088,76 @@ function updateEbayUI() {
 }
 
 // ════════════════════════════════════════════════════
-// CAMERA — getUserMedia live viewfinder
+// CAMERA — auto-starts when scan tab opens
+// Captures frame → immediately auto-identifies
 // ════════════════════════════════════════════════════
 let _cameraStream = null;
 
 async function startCamera() {
-  const video = q('cam-video');
+  const video    = q('cam-video');
   const controls = q('cam-controls');
+  const ui       = q('cam-ui');
   try {
     _cameraStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false,
     });
     video.srcObject = _cameraStream;
-    video.style.display = 'block';
-    q('cam-ui').classList.add('hide');
+    await video.play().catch(() => {});
+    ui.classList.add('hide');
     q('scan-beam').style.display = 'block';
-    if (controls) { controls.style.display = 'flex'; }
+    if (controls) controls.style.display = 'flex';
     q('cam-zone').classList.add('live');
-    q('btn-camera').textContent = '⏹ Stop';
-    q('btn-camera').onclick = stopCamera;
   } catch (err) {
-    // Camera permission denied or not available — fall back to file picker
-    toast('Camera not available — use Upload Photo instead', 'err');
-    triggerFile();
+    // Camera permission denied — show message in the overlay
+    ui.classList.remove('hide');
+    ui.innerHTML = `
+      <div style="font-size:32px">🚫</div>
+      <div style="font-size:13px;color:var(--sub);text-align:center;padding:0 16px">
+        Camera access denied.<br>Search by card name below.
+      </div>`;
+    console.warn('Camera error:', err.message);
   }
 }
 
 function captureFrame() {
   const video = q('cam-video');
   if (!video.srcObject) return;
-  // Draw current video frame to a canvas, convert to blob
-  const canvas = document.createElement('canvas');
+
+  // Draw current frame to canvas
+  const canvas  = document.createElement('canvas');
   canvas.width  = video.videoWidth  || 640;
   canvas.height = video.videoHeight || 480;
   canvas.getContext('2d').drawImage(video, 0, 0);
+
   canvas.toBlob(blob => {
     if (!blob) { toast('Could not capture frame', 'err'); return; }
-    S._imageFile = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
+
+    // Show the captured frame
     const url = URL.createObjectURL(blob);
+    S._imageFile = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
     S.cardImgSrc = url;
     showCamPreview(url);
-    stopCamera();
-    const sa = q('scan-actions');
-    sa.style.display = 'flex'; sa.style.flexDirection = 'column';
+
+    // Stop camera stream
+    stopCameraStream();
+
+    // Auto-identify immediately — no button needed
+    identifyCard();
   }, 'image/jpeg', 0.92);
 }
 
-function stopCamera() {
+function stopCameraStream() {
   if (_cameraStream) {
     _cameraStream.getTracks().forEach(t => t.stop());
     _cameraStream = null;
   }
-  const video = q('cam-video');
-  video.srcObject = null;
+  const video    = q('cam-video');
   const controls = q('cam-controls');
+  video.srcObject = null;
   if (controls) controls.style.display = 'none';
-  q('scan-beam').style.display = 'none';
-  const btn = q('btn-camera');
-  if (btn) { btn.textContent = '📷 Camera'; btn.onclick = startCamera; }
 }
 
-function resetScanner() {
-  stopCamera();
-  const img = q('cam-img');
-  img.src = ''; img.style.display = 'none';
-  q('cam-ui').classList.remove('hide');
-  q('scan-beam').style.display = 'block';
-  q('cam-zone').classList.remove('live');
-  q('scan-actions').style.display = 'none';
-  S._imageFile = null; S.cardImgSrc = null;
-}
-
-// ════════════════════════════════════════════════════
-// FILE INPUT
-// ════════════════════════════════════════════════════
-function triggerFile() {
-  const fi = q('file-in'); fi.value = ''; fi.click();
-}
-function onFile(e) {
-  const f = e.target.files[0]; if (!f) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    S.cardImgSrc = ev.target.result;
-    S._imageFile = f;
-    showCamPreview(ev.target.result);
-    const sa = q('scan-actions');
-    sa.style.display = 'flex'; sa.style.flexDirection = 'column';
-    q('btn-identify').onclick = identifyCard;
-  };
-  reader.readAsDataURL(f);
-}
 function showCamPreview(src) {
   const img = q('cam-img');
   img.src = src; img.style.display = 'block';
@@ -1178,22 +1166,81 @@ function showCamPreview(src) {
   q('cam-zone').classList.add('live');
 }
 
+function retryCamera() {
+  // Reset scan UI and restart camera
+  const img = q('cam-img');
+  img.src = ''; img.style.display = 'none';
+  q('scan-loading').style.display = 'none';
+  q('scan-retry').style.display   = 'none';
+  q('cam-zone').classList.remove('live');
+  q('cam-ui').classList.remove('hide');
+  q('cam-ui').innerHTML = `<div class="cam-ui-icon">📷</div><div class="cam-ui-hint">Starting camera…</div>`;
+  q('scan-beam').style.display = 'block';
+  S._imageFile = null; S.cardImgSrc = null;
+  startCamera();
+}
+
 // ════════════════════════════════════════════════════
 // LIVE SEARCH — suggestions as you type
 // ════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
+// CARD SEARCH — calls TCGdex directly from the browser
+// No backend token needed. TCGdex is a public free API.
+// ════════════════════════════════════════════════════
+const TCGDEX_DIRECT = 'https://api.tcgdex.net/v2/en';
+
+async function tcgdexSearch(name, limit = 20) {
+  const resp = await fetch(`${TCGDEX_DIRECT}/cards?name=${encodeURIComponent(name)}&pageSize=${limit}`, {
+    headers: { 'Accept': 'application/json' },
+  });
+  if (!resp.ok) throw new Error('TCGdex search failed');
+  const data = await resp.json();
+  return Array.isArray(data) ? data : [];
+}
+
+async function tcgdexCard(id) {
+  const resp = await fetch(`${TCGDEX_DIRECT}/cards/${encodeURIComponent(id)}`, {
+    headers: { 'Accept': 'application/json' },
+  });
+  if (!resp.ok) throw new Error('Card not found');
+  return resp.json();
+}
+
+function tcgdexFormat(card) {
+  return {
+    id:        card.id,
+    name:      card.name,
+    supertype: card.category || 'Pokemon',
+    subtypes:  card.stage ? [card.stage] : [],
+    rarity:    card.rarity || 'Unknown',
+    number:    card.localId || '',
+    img:       card.image ? `${card.image}/high.webp` : '',
+    imgLow:    card.image ? `${card.image}/low.webp`  : '',
+    hp:        card.hp   || null,
+    types:     card.types || [],
+    set: {
+      id:     card.set?.id    || '',
+      name:   card.set?.name  || '',
+      total:  card.set?.cardCount?.official || card.set?.cardCount?.total || '',
+      year:   card.set?.releaseDate?.slice(0, 4) || '',
+    },
+    pricing: card.pricing || null,
+  };
+}
+
 let _searchTimer = null;
 let _lastQuery = '';
 
 function onSearchInput() {
   const val = q('search-inp').value.trim();
   clearTimeout(_searchTimer);
+  const sugEl = q('search-suggestions');
   if (val.length < 2) {
-    q('search-suggestions').style.display = 'none';
-    q('search-suggestions').innerHTML = '';
+    sugEl.style.display = 'none';
+    sugEl.innerHTML = '';
     return;
   }
-  // Debounce 350ms so we don't fire on every keystroke
-  _searchTimer = setTimeout(() => fetchSuggestions(val), 350);
+  _searchTimer = setTimeout(() => fetchSuggestions(val), 300);
 }
 
 async function fetchSuggestions(query) {
@@ -1201,33 +1248,31 @@ async function fetchSuggestions(query) {
   _lastQuery = query;
   const sugEl = q('search-suggestions');
   sugEl.style.display = 'flex';
-  sugEl.innerHTML = '<div class="spin-wrap" style="padding:10px 0"><div class="spinner" style="width:24px;height:24px;border-width:2px"></div></div>';
+  sugEl.innerHTML = '<div style="padding:10px 14px;color:var(--muted);font-size:13px">Searching…</div>';
   try {
-    const data = await api('GET', `/api/cards/search?q=${encodeURIComponent(query)}`);
-    if (!data.cards?.length) {
+    const cards = await tcgdexSearch(query, 15);
+    if (!cards.length) {
       sugEl.innerHTML = '<div style="padding:12px 14px;color:var(--muted);font-size:13px">No cards found</div>';
       return;
     }
-    // Group by name so "Charizard" shows all variants together
-    sugEl.innerHTML = data.cards.slice(0, 15).map((c, i) => `
+    window._searchResults = cards;
+    sugEl.innerHTML = cards.map((c, i) => `
       <div onclick="selectCard(${i})" style="
         display:flex;align-items:center;gap:10px;
         padding:10px 14px;cursor:pointer;
         border-bottom:1px solid var(--border);
         transition:background .1s;
-      " onmouseenter="this.style.background='var(--s2)'"
-         onmouseleave="this.style.background=''"
-         ontouchstart="this.style.background='var(--s2)'"
+      " ontouchstart="this.style.background='var(--s2)'"
          ontouchend="this.style.background=''">
-        <img src="${c.img}" style="width:32px;height:44px;object-fit:contain;border-radius:4px;background:var(--s2);flex-shrink:0"
+        <img src="${c.image ? c.image+'/low.webp' : ''}"
+          style="width:32px;height:44px;object-fit:contain;border-radius:4px;background:var(--s2);flex-shrink:0"
           onerror="this.style.display='none'">
         <div style="flex:1;min-width:0">
           <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
-          <div style="font-size:11px;color:var(--sub)">${c.set?.name || ''} · #${c.number || ''}${c.rarity ? ' · ' + c.rarity : ''}</div>
+          <div style="font-size:11px;color:var(--sub)">${c.set?.name || ''} · #${c.localId || ''}${c.rarity ? ' · ' + c.rarity : ''}</div>
         </div>
         <div style="font-size:11px;color:var(--muted);flex-shrink:0">→</div>
       </div>`).join('');
-    window._searchResults = data.cards;
   } catch(e) {
     sugEl.innerHTML = `<div style="padding:12px 14px;color:var(--red);font-size:13px">${e.message}</div>`;
   }
@@ -1242,28 +1287,28 @@ async function doSearch() {
   const resultsEl = q('search-results');
   resultsEl.innerHTML = '<div class="spin-wrap"><div class="spinner"></div></div>';
   try {
-    const data = await api('GET', `/api/cards/search?q=${encodeURIComponent(val)}`);
-    window._searchResults = data.cards || [];
-    if (!data.cards?.length) {
+    const cards = await tcgdexSearch(val, 20);
+    window._searchResults = cards;
+    if (!cards.length) {
       resultsEl.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:10px 0;text-align:center">No cards found. Try a different name.</div>';
       return;
     }
     resultsEl.innerHTML = `
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-family:\'Barlow Semi Condensed\',sans-serif">${data.cards.length} results for "${val}"</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-family:'Barlow Semi Condensed',sans-serif">${cards.length} results for "${val}"</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        ${data.cards.slice(0, 20).map((c, i) => `
+        ${cards.map((c, i) => `
           <div onclick="selectCard(${i})" style="
             background:var(--s1);border:1px solid var(--border);border-radius:12px;
-            overflow:hidden;cursor:pointer;transition:border-color .15s
-          ">
+            overflow:hidden;cursor:pointer;touch-action:manipulation">
             <div style="background:var(--s2);padding:10px;display:flex;align-items:center;justify-content:center;height:100px">
-              <img src="${c.img}" style="max-height:90px;max-width:100%;object-fit:contain;border-radius:4px"
-                onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2284%22><rect fill=%22%231d1d38%22 width=%2260%22 height=%2284%22 rx=%225%22/><text fill=%22%234a4a78%22 x=%2230%22 y=%2248%22 text-anchor=%22middle%22 font-size=%2224%22>🃏</text></svg>'">
+              <img src="${c.image ? c.image+'/low.webp' : ''}"
+                style="max-height:90px;max-width:100%;object-fit:contain;border-radius:4px"
+                onerror="this.style.opacity='.3'">
             </div>
             <div style="padding:8px">
-              <div style="font-size:13px;font-weight:700;font-family:\'Barlow Condensed\',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
+              <div style="font-size:13px;font-weight:700;font-family:'Barlow Condensed',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</div>
               <div style="font-size:10px;color:var(--sub);margin-top:2px">${c.set?.name || ''}</div>
-              <div style="font-size:10px;color:var(--muted)">#${c.number || ''}${c.rarity ? ' · ' + c.rarity : ''}</div>
+              <div style="font-size:10px;color:var(--muted)">#${c.localId || ''}${c.rarity ? ' · ' + c.rarity : ''}</div>
             </div>
           </div>`).join('')}
       </div>`;
@@ -1272,32 +1317,25 @@ async function doSearch() {
   }
 }
 
-// Dismiss suggestions when tapping outside
 document.addEventListener('click', e => {
   if (!e.target.closest('#search-inp') && !e.target.closest('#search-suggestions')) {
     const el = q('search-suggestions');
-    if (el) { el.style.display = 'none'; }
+    if (el) el.style.display = 'none';
   }
 });
 
-// ════════════════════════════════════════════════════
-// SELECT CARD from search results
-// ════════════════════════════════════════════════════
 async function selectCard(idx) {
   const brief = window._searchResults?.[idx];
   if (!brief) return;
-  // Dismiss search UI
   q('search-suggestions').style.display = 'none';
-  q('search-results').innerHTML = '';
+  q('search-results').innerHTML = '<div class="spin-wrap"><div class="spinner"></div><div class="spin-lbl">Loading card…</div></div>';
   q('search-inp').value = '';
   _lastQuery = '';
-  // Show loading
-  q('search-results').innerHTML = '<div class="spin-wrap"><div class="spinner"></div><div class="spin-lbl">Loading card...</div></div>';
   try {
-    const card = await api('GET', `/api/cards/${encodeURIComponent(brief.id)}`);
-    S.card = card;
-    S.cardImgSrc = card.img;
-    showCamPreview(card.img);
+    // Fetch full card directly from TCGdex
+    const raw = await tcgdexCard(brief.id);
+    S.card = tcgdexFormat(raw);
+    S.cardImgSrc = S.card.img;
     q('search-results').innerHTML = '';
     renderResult();
     await fetchPrices();
@@ -1309,43 +1347,45 @@ async function selectCard(idx) {
 }
 
 // ════════════════════════════════════════════════════
-// IDENTIFY CARD — real Vision API call
+// IDENTIFY CARD — called automatically after capture
 // ════════════════════════════════════════════════════
 async function identifyCard() {
   if (!S._imageFile && !S.cardImgSrc) return;
-  const spin = q('scan-loading'); const btn = q('btn-identify');
-  spin.style.display='flex'; if(btn) btn.disabled=true;
-  setText('scan-loading-msg', 'Sending to Vision API…');
+  const spin  = q('scan-loading');
+  const retry = q('scan-retry');
+  spin.style.display  = 'flex';
+  if (retry) retry.style.display = 'none';
+  setText('scan-loading-msg', 'Identifying card…');
 
   try {
-    let body;
+    let body = new FormData();
     if (S._imageFile) {
-      body = new FormData();
       body.append('image', S._imageFile, 'card.jpg');
     } else {
-      // Convert data URL to blob
-      const blob = await fetch(S.cardImgSrc).then(r=>r.blob());
-      body = new FormData();
+      const blob = await fetch(S.cardImgSrc).then(r => r.blob());
       body.append('image', blob, 'card.jpg');
     }
-    setText('scan-loading-msg', 'Identifying card…');
     const data = await api('POST', '/api/cards/identify', body, true);
     S.card = data.card;
     S.cardImgSrc = data.card.img;
     S.scansTotal++;
     save();
-    setText('scan-loading-msg', 'Loading prices…');
     renderResult();
     await fetchPrices();
     gotoTab('result');
   } catch(e) {
-    if (e.status === 422) {
-      toast('Could not identify — try better lighting or search by name below.', 'err');
+    spin.style.display = 'none';
+    if (e.status === 422 || e.status === 401) {
+      // 401 = Vision key not set — try local search instead
+      toast('Could not identify. Search by name below ↓', 'err');
     } else {
       toast('Error: ' + e.message, 'err');
     }
+    // Show retry button so user can try another photo
+    if (retry) { retry.style.display = 'flex'; retry.style.flexDirection = 'column'; }
+    return;
   } finally {
-    spin.style.display='none'; if(btn) btn.disabled=false;
+    spin.style.display = 'none';
   }
 }
 
@@ -1392,36 +1432,68 @@ function setLang(lang) {
 }
 
 // ════════════════════════════════════════════════════
-// FETCH PRICES — TCGdex (free, no API key needed)
-// Pricing comes embedded in the card response from TCGdex.
-// Backend applies condition + language multipliers.
+// FETCH PRICES — reads TCGdex pricing already on card,
+// falls back to backend API if pricing not embedded.
 // ════════════════════════════════════════════════════
 async function fetchPrices() {
   if (!S.card) return;
-  const spin=q('price-spin'), body=q('price-body');
-  spin.style.display='flex'; body.style.display='none';
+  const spin = q('price-spin'), body = q('price-body');
+  spin.style.display = 'flex'; body.style.display = 'none';
+
   try {
-    const p = await api('GET', `/api/prices?cardId=${S.card.id}&condition=${encodeURIComponent(S.condition)}&language=${encodeURIComponent(S.language)}`);
+    // TCGdex embeds pricing in the card object — use it directly
+    const pricing  = S.card.pricing;
+    const tcp      = pricing?.tcgplayer;
+    const cm       = pricing?.cardmarket;
+    const condMult = { 'Mint':1.15,'Near Mint':1.0,'Good':0.70,'Played':0.45,'Poor':0.20 }[S.condition] ?? 1.0;
+    const langMult = { 'English':1.0,'Japanese':0.55,'French':0.40,'German':0.40,'Spanish':0.40,'Korean':0.45 }[S.language] ?? 0.5;
+
+    let p = null;
+
+    if (tcp?.market || cm?.averageSellPrice) {
+      const base   = tcp?.market || (cm.averageSellPrice * 1.08);
+      const market = +(base * condMult * langMult).toFixed(2);
+      const low    = +((tcp?.low  || base * 0.80) * condMult * langMult).toFixed(2);
+      const mid    = +((tcp?.mid  || base        ) * condMult * langMult).toFixed(2);
+      const high   = +((tcp?.high || base * 1.30) * condMult * langMult).toFixed(2);
+      // Trend from Cardmarket 1-day vs 7-day
+      let trend = null;
+      if (cm?.avg1Day && cm?.avg7Days) {
+        const pct  = ((cm.avg1Day - cm.avg7Days) / cm.avg7Days) * 100;
+        trend = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+      }
+      p = { market, low, mid, high, trend };
+    } else if (S.token) {
+      // Fall back to backend (which also reads TCGdex pricing)
+      p = await api('GET', `/api/prices?cardId=${S.card.id}&condition=${encodeURIComponent(S.condition)}&language=${encodeURIComponent(S.language)}`);
+    }
+
     S.prices = p;
-    setText('p-market', '$'+p.market.toFixed(2));
-    setText('p-low',    '$'+p.low.toFixed(2));
-    setText('p-high',   '$'+p.high.toFixed(2));
-    setText('p-mid',    '$'+p.mid.toFixed(2));
-    const tEl = q('p-trend');
-    if (p.trend) {
-      tEl.textContent = p.trend;
-      tEl.className = 'price-cell-val ' + (p.trend.startsWith('+') ? 'trend-up' : 'trend-dn');
+
+    if (!p || !p.market) {
+      setText('p-market', 'N/A');
+      ['p-low','p-high','p-mid','p-trend'].forEach(id => setText(id, '—'));
     } else {
-      tEl.textContent = '—';
-      tEl.className = 'price-cell-val';
+      setText('p-market', '$' + p.market.toFixed(2));
+      setText('p-low',    '$' + p.low.toFixed(2));
+      setText('p-high',   '$' + p.high.toFixed(2));
+      setText('p-mid',    '$' + p.mid.toFixed(2));
+      const tEl = q('p-trend');
+      if (p.trend) {
+        tEl.textContent = p.trend;
+        tEl.className   = 'price-cell-val ' + (p.trend.startsWith('+') ? 'trend-up' : 'trend-dn');
+      } else {
+        tEl.textContent = '—';
+        tEl.className   = 'price-cell-val';
+      }
     }
   } catch(e) {
-    S.prices = { market:0, low:0, mid:0, high:0 };
-    setText('p-market','N/A');
-    ['p-low','p-high','p-mid','p-trend'].forEach(id=>setText(id,'—'));
-    if (e.status !== 404) toast('Price data unavailable: '+e.message, 'err');
+    S.prices = { market: 0, low: 0, mid: 0, high: 0 };
+    setText('p-market', 'N/A');
+    ['p-low','p-high','p-mid','p-trend'].forEach(id => setText(id, '—'));
+    if (e.status !== 404) toast('Price data unavailable', 'err');
   } finally {
-    spin.style.display='none'; body.style.display='block';
+    spin.style.display = 'none'; body.style.display = 'block';
   }
 }
 
@@ -1760,38 +1832,61 @@ function rebuildListingPrice() {
 
 async function submitListing() {
   if (!S.ebay?.connected) {
-    toast('Connect your eBay account first!','err');
-    setTimeout(()=>connectEbay(),600); return;
+    toast('Connect your eBay account first!', 'err');
+    setTimeout(() => connectEbay(), 600);
+    return;
   }
-  const btn=q('btn-submit');
-  btn.disabled=true; btn.textContent='⏳ Submitting to eBay…';
+  const btn = q('btn-submit');
+  btn.disabled = true;
+  btn.textContent = '⏳ Submitting to eBay…';
   try {
-    const price = parseFloat(q('l-price')?.textContent?.replace('$','')||0);
-    const data = await api('POST','/api/listings/create',{
+    const priceStr = q('l-price')?.textContent?.replace('$', '') || '0';
+    const price    = parseFloat(priceStr);
+    if (!price || price <= 0) {
+      throw new Error('Price must be greater than $0. Check the market price for this card.');
+    }
+
+    // Only send http/https image URLs — blob: URLs are browser-only
+    // and cannot be fetched by eBay's servers
+    const imageUrls = getListingImageUrls().filter(u => u.startsWith('http'));
+
+    const data = await api('POST', '/api/listings/create', {
       cardId:      S.card.id,
       condition:   S.condition,
       language:    S.language,
       price,
       title:       q('l-title')?.value,
       description: q('l-desc')?.value,
-      imageUrls:   getListingImageUrls(), // TCGdex image + user photos
+      imageUrls,
     });
-    // Save listing locally
+
     S.listings.push({
-      uid:Date.now(), cardId:S.card.id, name:S.card.name,
-      img:S.card.img, condition:S.condition, language:S.language,
-      price, ebayListingId:data.ebayListingId, status:'live', createdAt:Date.now(),
+      uid: Date.now(), cardId: S.card.id, name: S.card.name,
+      img: S.card.img, condition: S.condition, language: S.language,
+      price, ebayListingId: data.ebayListingId, status: 'live', createdAt: Date.now(),
     });
     save(); updateUserUI(); renderRecents();
+
     q('success-box').classList.add('show');
-    setText('success-id',`SKU: ${data.sku} · Listing ID: ${data.ebayListingId}`);
-    const link=q('ebay-listing-link');
-    if(link&&data.ebayUrl){link.href=data.ebayUrl;link.style.display='block';}
-    btn.textContent='✅ Listed on eBay!';
-    toast('Listed on eBay! 🎉','ok');
+    setText('success-id', `SKU: ${data.sku} · Listing ID: ${data.ebayListingId}`);
+    const link = q('ebay-listing-link');
+    if (link && data.ebayUrl) {
+      link.href         = data.ebayUrl;
+      link.style.display = 'block';
+      link.textContent   = process.env?.EBAY_SANDBOX === 'true'
+        ? 'View on eBay Sandbox →'
+        : 'View on eBay →';
+    }
+    btn.textContent = '✅ Listed on eBay!';
+    toast('Listed on eBay! 🎉', 'ok');
+
   } catch(e) {
-    btn.disabled=false; btn.textContent='🛒 Post to eBay — Buy It Now';
-    toast('Listing failed: '+(e.data?.detail||e.message),'err');
+    btn.disabled    = false;
+    btn.textContent = '🛒 Post to eBay — Buy It Now';
+    // Show the specific eBay error so user knows what to fix
+    const msg = e.data?.detail || e.data?.error || e.message || 'Unknown error';
+    toast('Listing failed: ' + msg, 'err');
+    console.error('Listing error:', e);
   }
 }
 
