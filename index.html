@@ -1406,65 +1406,41 @@ function retryCamera() {
 }
 
 // ════════════════════════════════════════════════════
-// LIVE SEARCH — suggestions as you type
+// CARD SEARCH — TCGdex via backend proxy
+// Supports:
+//   "charizard"       → name search
+//   "charizard #25"   → name + number
+//   "#25"             → number only
+//   "#TG01"           → special number
 // ════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════
-// CARD SEARCH — calls TCGdex directly from the browser
-// No backend token needed. TCGdex is a public free API.
-// ════════════════════════════════════════════════════
-const TCGDEX_DIRECT = 'https://api.tcgdex.net/v2/en';
 
-async function tcgdexSearch(name, limit = 20) {
-  // TCGdex: name= does a partial case-insensitive match
-  // Returns 404 (not empty array) when nothing found — must handle that
-  // No reliable pagination param — just filter by name and take first results
-  const url = `${TCGDEX_DIRECT}/cards?name=${encodeURIComponent(name)}`;
-  try {
-    const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    // 404 = no cards found — treat as empty, not an error
-    if (resp.status === 404) return [];
-    if (!resp.ok) throw new Error(`TCGdex error ${resp.status}`);
-    const data = await resp.json();
-    const cards = Array.isArray(data) ? data : [];
-    return cards.slice(0, limit);
-  } catch(e) {
-    // Network error — rethrow so UI can show it
-    throw new Error('Search unavailable: ' + e.message);
-  }
+function parseInput(raw) {
+  const input = raw.trim();
+  // Extract #number (e.g. #25, #TG01, #4/102)
+  const numMatch = input.match(/#([A-Za-z0-9]+)(?:\/\d+)?/);
+  const number   = numMatch ? numMatch[1] : '';
+  const name     = input.replace(/#[^\s]*/g, '').trim();
+  return { name, number };
 }
 
-async function tcgdexCard(id) {
-  const resp = await fetch(`${TCGDEX_DIRECT}/cards/${encodeURIComponent(id)}`, {
-    headers: { 'Accept': 'application/json' },
-  });
-  if (!resp.ok) throw new Error('Card not found');
-  return resp.json();
+async function cardSearch(rawInput, pageSize = 20) {
+  const { name, number } = parseInput(rawInput);
+  const params = new URLSearchParams({ pageSize });
+  if (name)   params.set('q', name);
+  if (number) params.set('number', number);
+  const data = await api('GET', '/api/cards/search?' + params.toString());
+  return data.cards || [];
 }
 
-function tcgdexFormat(card) {
-  return {
-    id:        card.id,
-    name:      card.name,
-    supertype: card.category || 'Pokemon',
-    subtypes:  card.stage ? [card.stage] : [],
-    rarity:    card.rarity || 'Unknown',
-    number:    card.localId || '',
-    img:       card.image ? `${card.image}/high.webp` : '',
-    imgLow:    card.image ? `${card.image}/low.webp`  : '',
-    hp:        card.hp   || null,
-    types:     card.types || [],
-    set: {
-      id:     card.set?.id    || '',
-      name:   card.set?.name  || '',
-      total:  card.set?.cardCount?.official || card.set?.cardCount?.total || '',
-      year:   card.set?.releaseDate?.slice(0, 4) || '',
-    },
-    pricing: card.pricing || null,
-  };
+async function cardGetById(id) {
+  return api('GET', `/api/cards/${encodeURIComponent(id)}`);
 }
 
+// ════════════════════════════════════════════════════
+// SEARCH UI — live suggestions + full grid
+// ════════════════════════════════════════════════════
 let _searchTimer = null;
-let _lastQuery = '';
+let _lastQuery   = '';
 
 function onSearchInput() {
   const val = q('search-inp').value.trim();
@@ -1473,9 +1449,10 @@ function onSearchInput() {
   if (val.length < 2) {
     sugEl.style.display = 'none';
     sugEl.innerHTML = '';
+    _lastQuery = '';
     return;
   }
-  _searchTimer = setTimeout(() => fetchSuggestions(val), 300);
+  _searchTimer = setTimeout(() => fetchSuggestions(val), 280);
 }
 
 async function fetchSuggestions(query) {
@@ -1485,31 +1462,31 @@ async function fetchSuggestions(query) {
   sugEl.style.display = 'flex';
   sugEl.innerHTML = '<div style="padding:10px 14px;color:var(--muted);font-size:13px">Searching…</div>';
   try {
-    const cards = await tcgdexSearch(query, 15);
+    const cards = await cardSearch(query, 10);
     if (!cards.length) {
-      sugEl.innerHTML = '<div style="padding:12px 14px;color:var(--muted);font-size:13px">No cards found</div>';
+      sugEl.innerHTML = '<div style="padding:12px 14px;color:var(--muted);font-size:13px">No cards found — try <b>Charizard #4</b></div>';
       return;
     }
     window._searchResults = cards;
     sugEl.innerHTML = '';
-    cards.forEach((c, i) => {
-      const row  = document.createElement('div');
+    cards.forEach((card, i) => {
+      const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);touch-action:manipulation';
       row.ontouchstart = () => row.style.background = 'var(--s2)';
       row.ontouchend   = () => row.style.background = '';
       row.onclick      = () => selectCard(i);
       const img = document.createElement('img');
-      img.src = c.image ? c.image + '/low.webp' : '';
+      img.src = card.imgLow || card.img || '';
       img.style.cssText = 'width:32px;height:44px;object-fit:contain;border-radius:4px;background:var(--s2);flex-shrink:0';
       img.onerror = () => img.style.display = 'none';
       const info = document.createElement('div');
       info.style.cssText = 'flex:1;min-width:0';
       const nameEl = document.createElement('div');
       nameEl.style.cssText = 'font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-      nameEl.textContent = c.name;
+      nameEl.textContent = card.name;
       const metaEl = document.createElement('div');
       metaEl.style.cssText = 'font-size:11px;color:var(--sub)';
-      metaEl.textContent = [c.set?.name, c.localId ? '#'+c.localId : '', c.rarity].filter(Boolean).join(' · ');
+      metaEl.textContent = [card.set?.name, card.number ? '#'+card.number : '', card.rarity].filter(Boolean).join(' · ');
       const arrow = document.createElement('div');
       arrow.style.cssText = 'font-size:11px;color:var(--muted);flex-shrink:0';
       arrow.textContent = '→';
@@ -1531,11 +1508,11 @@ async function doSearch() {
   const resultsEl = q('search-results');
   resultsEl.innerHTML = '<div class="spin-wrap"><div class="spinner"></div></div>';
   try {
-    const cards = await tcgdexSearch(val, 20);
+    const cards = await cardSearch(val, 20);
     window._searchResults = cards;
     resultsEl.innerHTML = '';
     if (!cards.length) {
-      resultsEl.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:10px 0;text-align:center">No cards found. Try a different name.</div>';
+      resultsEl.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:10px 0;text-align:center">No cards found.<br><span style="font-size:12px">Try <b>Charizard</b> or <b>Charizard #4</b></span></div>';
       return;
     }
     const label = document.createElement('div');
@@ -1544,7 +1521,7 @@ async function doSearch() {
     resultsEl.appendChild(label);
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px';
-    cards.forEach((c, i) => {
+    cards.forEach((card, i) => {
       const tile = document.createElement('div');
       tile.style.cssText = 'background:var(--s1);border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;touch-action:manipulation';
       tile.ontouchstart = () => tile.style.borderColor = 'var(--gold)';
@@ -1553,7 +1530,7 @@ async function doSearch() {
       const imgWrap = document.createElement('div');
       imgWrap.style.cssText = 'background:var(--s2);padding:10px;display:flex;align-items:center;justify-content:center;height:100px';
       const img = document.createElement('img');
-      img.src = c.image ? c.image + '/low.webp' : '';
+      img.src = card.imgLow || card.img || '';
       img.style.cssText = 'max-height:90px;max-width:100%;object-fit:contain;border-radius:4px';
       img.onerror = () => img.style.opacity = '0.2';
       imgWrap.appendChild(img);
@@ -1561,13 +1538,13 @@ async function doSearch() {
       body.style.cssText = 'padding:8px';
       const nameEl = document.createElement('div');
       nameEl.style.cssText = 'font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-      nameEl.textContent = c.name;
+      nameEl.textContent = card.name;
       const setEl = document.createElement('div');
       setEl.style.cssText = 'font-size:10px;color:var(--sub);margin-top:2px';
-      setEl.textContent = c.set?.name || '';
+      setEl.textContent = card.set?.name || '';
       const numEl = document.createElement('div');
       numEl.style.cssText = 'font-size:10px;color:var(--muted)';
-      numEl.textContent = [c.localId ? '#'+c.localId : '', c.rarity].filter(Boolean).join(' · ');
+      numEl.textContent = [card.number ? '#'+card.number : '', card.rarity].filter(Boolean).join(' · ');
       body.append(nameEl, setEl, numEl);
       tile.append(imgWrap, body);
       grid.appendChild(tile);
@@ -1593,10 +1570,10 @@ async function selectCard(idx) {
   q('search-inp').value = '';
   _lastQuery = '';
   try {
-    // Fetch full card directly from TCGdex
-    const raw = await tcgdexCard(brief.id);
-    S.card = tcgdexFormat(raw);
-    S.cardImgSrc = S.card.img;
+    // Fetch full card with JustTCG pricing from backend
+    const card = await cardGetById(brief.id);
+    S.card = card;
+    S.cardImgSrc = card.img;
     q('search-results').innerHTML = '';
     renderResult();
     await fetchPrices();
@@ -1608,24 +1585,24 @@ async function selectCard(idx) {
 }
 
 // ════════════════════════════════════════════════════
-// IDENTIFY CARD — called automatically after capture
+// IDENTIFY — sends image to backend OCR endpoint
 // ════════════════════════════════════════════════════
 async function identifyCard() {
   if (!S._imageFile && !S.cardImgSrc) return;
   const spin  = q('scan-loading');
   const retry = q('scan-retry');
-  spin.style.display  = 'flex';
+  spin.style.display = 'flex';
   if (retry) retry.style.display = 'none';
-  setText('scan-loading-msg', 'Identifying card…');
-
+  setText('scan-loading-msg', 'Reading card…');
   try {
-    let body = new FormData();
+    const body = new FormData();
     if (S._imageFile) {
       body.append('image', S._imageFile, 'card.jpg');
     } else {
       const blob = await fetch(S.cardImgSrc).then(r => r.blob());
       body.append('image', blob, 'card.jpg');
     }
+    setText('scan-loading-msg', 'Identifying…');
     const data = await api('POST', '/api/cards/identify', body, true);
     S.card = data.card;
     S.cardImgSrc = data.card.img;
@@ -1636,22 +1613,18 @@ async function identifyCard() {
     gotoTab('result');
   } catch(e) {
     spin.style.display = 'none';
-    if (e.status === 422 || e.status === 401) {
-      // 401 = Vision key not set — try local search instead
-      toast('Could not identify. Search by name below ↓', 'err');
-    } else {
-      toast('Error: ' + e.message, 'err');
-    }
-    // Show retry button so user can try another photo
     if (retry) { retry.style.display = 'flex'; retry.style.flexDirection = 'column'; }
-    return;
+    const msg = e.data?.detected
+      ? `Saw: ${JSON.stringify(e.data.detected)} — search by name ↓`
+      : (e.data?.error || e.message || 'Could not identify — search by name ↓');
+    toast(msg, 'err');
   } finally {
     spin.style.display = 'none';
   }
 }
 
 // ════════════════════════════════════════════════════
-// RENDER RESULT — uses TCGdex formatCard field names
+// RENDER RESULT
 // ════════════════════════════════════════════════════
 function renderResult() {
   const c = S.card;
@@ -1674,7 +1647,6 @@ function renderResult() {
     el.textContent = p.l;
     tags.appendChild(el);
   });
-  // Show affiliate links for this card
   updateAffiliateLinks();
 }
 
@@ -1682,60 +1654,48 @@ function renderResult() {
 // CONDITION / LANGUAGE
 // ════════════════════════════════════════════════════
 function setCond(label, code) {
-  S.condition=label; S.condCode=code;
-  document.querySelectorAll('#cond-row .pill').forEach(p=>p.classList.toggle('on',p.textContent===label));
+  S.condition = label; S.condCode = code;
+  document.querySelectorAll('#cond-row .pill').forEach(p => p.classList.toggle('on', p.textContent === label));
   fetchPrices();
 }
 function setLang(lang) {
-  S.language=lang;
-  document.querySelectorAll('#lang-row .pill').forEach(p=>p.classList.toggle('on',p.textContent.includes(lang)));
+  S.language = lang;
+  document.querySelectorAll('#lang-row .pill').forEach(p => p.classList.toggle('on', p.textContent.includes(lang)));
   fetchPrices();
 }
 
 // ════════════════════════════════════════════════════
-// FETCH PRICES — reads TCGdex pricing from card object
-// Real field names from TCGdex docs:
-//   tcgplayer.normal.marketPrice / .lowPrice / .midPrice / .highPrice
-//   tcgplayer.holo.marketPrice   (holo variant)
-//   cardmarket.avg               (EUR average sell)
-//   cardmarket.low               (EUR low)
-//   cardmarket.trend             (EUR trend)
-//   cardmarket.avg1 / avg7 / avg30
+// FETCH PRICES — JustTCG via backend
+// card.pricing is pre-populated from /api/cards/:id
+// Falls back to /api/prices for condition adjustments
 // ════════════════════════════════════════════════════
 async function fetchPrices() {
   if (!S.card) return;
   const spin = q('price-spin'), body = q('price-body');
   spin.style.display = 'flex'; body.style.display = 'none';
-
   try {
-    const pricing  = S.card.pricing;
-    const tcp      = pricing?.tcgplayer;
-    const cm       = pricing?.cardmarket;
-    const condMult = { 'Mint':1.15,'Near Mint':1.0,'Good':0.70,'Played':0.45,'Poor':0.20 }[S.condition] ?? 1.0;
-    const langMult = { 'English':1.0,'Japanese':0.55,'French':0.40,'German':0.40,'Spanish':0.40,'Korean':0.45 }[S.language] ?? 0.5;
-
+    // Try to use pricing already on the card object first
+    const p0 = S.card.pricing;
     let p = null;
 
-    // TCGdex actual structure: tcgplayer.normal.marketPrice or tcgplayer.holo.marketPrice
-    const tcpVariant = tcp?.holo || tcp?.normal || tcp?.reverse || null;
-    const usdBase    = tcpVariant?.marketPrice || tcpVariant?.midPrice || null;
-    const eurBase    = cm?.avg ? cm.avg * 1.08 : null;
-    const base       = usdBase || eurBase;
-
-    if (base) {
-      const market = +(base * condMult * langMult).toFixed(2);
-      const low    = +((tcpVariant?.lowPrice  || base * 0.75) * condMult * langMult).toFixed(2);
-      const mid    = +((tcpVariant?.midPrice  || base        ) * condMult * langMult).toFixed(2);
-      const high   = +((tcpVariant?.highPrice || base * 1.35) * condMult * langMult).toFixed(2);
-      // Cardmarket trend: avg1 (1-day) vs avg7 (7-day)
-      let trend = null;
-      if (cm?.avg1 && cm?.avg7 && cm.avg7 !== 0) {
-        const pct = ((cm.avg1 - cm.avg7) / cm.avg7) * 100;
-        trend = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
-      }
-      p = { market, low, mid, high, trend };
-    } else if (S.token) {
-      // Fall back to backend API which fetches the full card with pricing
+    if (p0?.market) {
+      // Apply condition/language multipliers client-side
+      const condMult = { 'Mint':1.15,'Near Mint':1.0,'Good':0.70,'Played':0.45,'Poor':0.20 }[S.condition] ?? 1.0;
+      const langMult = { 'English':1.0,'Japanese':0.55,'French':0.40,'German':0.40,'Spanish':0.40,'Korean':0.45 }[S.language] ?? 0.5;
+      p = {
+        market: +(p0.market  * condMult * langMult).toFixed(2),
+        low:    +((p0.low    || p0.market * 0.20) * condMult * langMult).toFixed(2),
+        mid:    +((p0.mid    || p0.market * 0.70) * condMult * langMult).toFixed(2),
+        high:   +((p0.high   || p0.market * 1.20) * condMult * langMult).toFixed(2),
+        trend:  p0.change7d != null
+          ? (p0.change7d >= 0 ? '+' : '') + p0.change7d.toFixed(1) + '%'
+          : null,
+        min7d:    p0.min7d  || null,
+        max7d:    p0.max7d  || null,
+        nearMint: +(p0.market * langMult).toFixed(2),
+      };
+    } else if (S.token && S.card.id) {
+      // Fetch from backend price endpoint
       p = await api('GET', `/api/prices?cardId=${S.card.id}&condition=${encodeURIComponent(S.condition)}&language=${encodeURIComponent(S.language)}`);
     }
 
@@ -1746,23 +1706,22 @@ async function fetchPrices() {
       ['p-low','p-high','p-mid','p-trend'].forEach(id => setText(id, '—'));
     } else {
       setText('p-market', '$' + p.market.toFixed(2));
-      setText('p-low',    '$' + p.low.toFixed(2));
-      setText('p-high',   '$' + p.high.toFixed(2));
-      setText('p-mid',    '$' + p.mid.toFixed(2));
+      setText('p-low',    '$' + (p.low   || 0).toFixed(2));
+      setText('p-high',   '$' + (p.high  || 0).toFixed(2));
+      setText('p-mid',    '$' + (p.mid   || 0).toFixed(2));
       const tEl = q('p-trend');
       if (p.trend) {
         tEl.textContent = p.trend;
         tEl.className   = 'price-cell-val ' + (p.trend.startsWith('+') ? 'trend-up' : 'trend-dn');
       } else {
-        tEl.textContent = '—';
-        tEl.className   = 'price-cell-val';
+        tEl.textContent = '—'; tEl.className = 'price-cell-val';
       }
     }
   } catch(e) {
     S.prices = { market: 0, low: 0, mid: 0, high: 0 };
     setText('p-market', 'N/A');
     ['p-low','p-high','p-mid','p-trend'].forEach(id => setText(id, '—'));
-    if (e.status !== 404) toast('Price data unavailable', 'err');
+    if (e.status !== 404) toast('Price unavailable', 'err');
   } finally {
     spin.style.display = 'none'; body.style.display = 'block';
   }
