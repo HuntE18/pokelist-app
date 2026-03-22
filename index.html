@@ -1138,11 +1138,15 @@ let _edgeTimer     = null;
 let _edgeScore     = 0;  // 0-100, how well a card is framed
 
 async function startCamera() {
-  const video    = q('cam-video');
-  const controls = q('cam-controls');
-  const ui       = q('cam-ui');
-  const guide    = q('align-guide');
+  const video     = q('cam-video');
+  const controls  = q('cam-controls');
+  const ui        = q('cam-ui');
+  const guide     = q('align-guide');
   const indicator = q('edge-indicator');
+
+  // Clear any previous stream
+  stopCameraStream();
+
   try {
     _cameraStream = await navigator.mediaDevices.getUserMedia({
       video: {
@@ -1152,31 +1156,53 @@ async function startCamera() {
       },
       audio: false,
     });
+
     video.srcObject = _cameraStream;
-    await video.play().catch(() => {});
+
+    // Wait for video to actually be playing before starting edge detection
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Video timeout')), 8000);
+      video.onloadedmetadata = () => {
+        video.play()
+          .then(() => { clearTimeout(timeout); resolve(); })
+          .catch(reject);
+      };
+      // If metadata already loaded
+      if (video.readyState >= 1) {
+        clearTimeout(timeout);
+        video.play().then(resolve).catch(reject);
+      }
+    });
+
+    // Video is playing — update UI
     ui.classList.add('hide');
-    q('scan-beam').style.display = 'none'; // beam replaced by edge detection
-    if (controls)   controls.style.display  = 'flex';
-    if (guide)      guide.style.display     = 'flex';
-    if (indicator)  indicator.style.display = 'block';
+    q('scan-beam').style.display = 'none';
+    if (guide)     { guide.style.display     = 'flex'; }
+    if (indicator) { indicator.style.display = 'block'; }
+    if (controls)  {
+      controls.style.display     = 'flex';
+      controls.style.position    = 'absolute';
+      controls.style.bottom      = '18px';
+      controls.style.left        = '0';
+      controls.style.right       = '0';
+      controls.style.zIndex      = '4';
+      controls.style.justifyContent = 'center';
+      controls.style.alignItems  = 'center';
+    }
     q('cam-zone').classList.add('live');
 
     // Start edge detection loop
-    video.addEventListener('loadeddata', () => {
-      _edgeTimer = setInterval(() => detectCardEdges(), 200);
-    }, { once: true });
-    // Also start if already loaded
-    if (video.readyState >= 2) {
-      _edgeTimer = setInterval(() => detectCardEdges(), 200);
-    }
+    clearInterval(_edgeTimer);
+    _edgeTimer = setInterval(() => detectCardEdges(), 200);
+
   } catch (err) {
+    console.warn('Camera error:', err.message);
     ui.classList.remove('hide');
     ui.innerHTML = `
       <div style="font-size:32px">🚫</div>
-      <div style="font-size:13px;color:var(--sub);text-align:center;padding:0 16px">
-        Camera access denied.<br>Search by card name below.
+      <div style="font-size:13px;color:var(--sub);text-align:center;padding:0 16px;line-height:1.5">
+        Camera not available.<br>Search by card name below.
       </div>`;
-    console.warn('Camera error:', err.message);
   }
 }
 
@@ -1389,10 +1415,13 @@ function retryCamera() {
 const TCGDEX_DIRECT = 'https://api.tcgdex.net/v2/en';
 
 async function tcgdexSearch(name, limit = 20) {
-  const resp = await fetch(`${TCGDEX_DIRECT}/cards?name=${encodeURIComponent(name)}&pageSize=${limit}`, {
-    headers: { 'Accept': 'application/json' },
-  });
-  if (!resp.ok) throw new Error('TCGdex search failed');
+  // TCGdex correct params: name= (partial match), itemsPerPage= (not pageSize)
+  const url = `${TCGDEX_DIRECT}/cards?name=${encodeURIComponent(name)}&itemsPerPage=${limit}`;
+  const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => '');
+    throw new Error(`TCGdex search failed (${resp.status}): ${txt.slice(0,100)}`);
+  }
   const data = await resp.json();
   return Array.isArray(data) ? data : [];
 }
