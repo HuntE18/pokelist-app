@@ -1415,15 +1415,22 @@ function retryCamera() {
 const TCGDEX_DIRECT = 'https://api.tcgdex.net/v2/en';
 
 async function tcgdexSearch(name, limit = 20) {
-  // TCGdex correct params: name= (partial match), itemsPerPage= (not pageSize)
-  const url = `${TCGDEX_DIRECT}/cards?name=${encodeURIComponent(name)}&itemsPerPage=${limit}`;
-  const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
-  if (!resp.ok) {
-    const txt = await resp.text().catch(() => '');
-    throw new Error(`TCGdex search failed (${resp.status}): ${txt.slice(0,100)}`);
+  // TCGdex: name= does a partial case-insensitive match
+  // Returns 404 (not empty array) when nothing found — must handle that
+  // No reliable pagination param — just filter by name and take first results
+  const url = `${TCGDEX_DIRECT}/cards?name=${encodeURIComponent(name)}`;
+  try {
+    const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    // 404 = no cards found — treat as empty, not an error
+    if (resp.status === 404) return [];
+    if (!resp.ok) throw new Error(`TCGdex error ${resp.status}`);
+    const data = await resp.json();
+    const cards = Array.isArray(data) ? data : [];
+    return cards.slice(0, limit);
+  } catch(e) {
+    // Network error — rethrow so UI can show it
+    throw new Error('Search unavailable: ' + e.message);
   }
-  const data = await resp.json();
-  return Array.isArray(data) ? data : [];
 }
 
 async function tcgdexCard(id) {
