@@ -1416,9 +1416,10 @@ function retryCamera() {
 
 function parseInput(raw) {
   const input = raw.trim();
-  // Extract #number (e.g. #25, #TG01, #4/102)
-  const numMatch = input.match(/#([A-Za-z0-9]+)(?:\/\d+)?/);
-  const number   = numMatch ? numMatch[1] : '';
+  // Extract #number — supports #25, #TG01, #XY17, #4/102, #BW50
+  const numMatch = input.match(/#([A-Za-z0-9]+)(?:\/[A-Za-z0-9]+)?/);
+  const number   = numMatch ? numMatch[1].toUpperCase() : '';
+  // Name = everything with # tokens removed
   const name     = input.replace(/#[^\s]*/g, '').trim();
   return { name, number };
 }
