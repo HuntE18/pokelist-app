@@ -1349,17 +1349,20 @@ function captureFrame() {
   const video = q('cam-video');
   if (!video.srcObject) return;
   const canvas  = document.createElement('canvas');
-  canvas.width  = video.videoWidth  || 640;
-  canvas.height = video.videoHeight || 480;
+  canvas.width  = video.videoWidth  || 1280;
+  canvas.height = video.videoHeight || 720;
   canvas.getContext('2d').drawImage(video, 0, 0);
   canvas.toBlob(blob => {
     if (!blob) { toast('Could not capture frame', 'err'); return; }
-    S._imageFile  = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
+    // Create File with explicit MIME type — canvas.toBlob on some Android browsers
+    // returns a blob with empty type, so we force image/jpeg here
+    const file = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
+    S._imageFile  = file;
     S.cardImgSrc  = URL.createObjectURL(blob);
     showCamPreview(S.cardImgSrc);
     stopCameraStream();
     identifyCard();
-  }, 'image/jpeg', 0.95);
+  }, 'image/jpeg', 0.92);
 }
 
 function stopCameraStream() {
@@ -1598,10 +1601,13 @@ async function identifyCard() {
   try {
     const body = new FormData();
     if (S._imageFile) {
-      body.append('image', S._imageFile, 'card.jpg');
+      // Force image/jpeg MIME type — Android canvas.toBlob can strip it
+      const file = new File([S._imageFile], 'card.jpg', { type: 'image/jpeg' });
+      body.append('image', file, 'card.jpg');
     } else {
       const blob = await fetch(S.cardImgSrc).then(r => r.blob());
-      body.append('image', blob, 'card.jpg');
+      const file = new File([blob], 'card.jpg', { type: 'image/jpeg' });
+      body.append('image', file, 'card.jpg');
     }
     setText('scan-loading-msg', 'Identifying…');
     const data = await api('POST', '/api/cards/identify', body, true);
@@ -1615,9 +1621,14 @@ async function identifyCard() {
   } catch(e) {
     spin.style.display = 'none';
     if (retry) { retry.style.display = 'flex'; retry.style.flexDirection = 'column'; }
-    const msg = e.data?.detected
-      ? `Saw: ${JSON.stringify(e.data.detected)} — search by name ↓`
-      : (e.data?.error || e.message || 'Could not identify — search by name ↓');
+    // Show the exact server error so we can diagnose
+    const serverMsg = e.data?.error || e.data?.debug ? 
+      (e.data.error + (e.data.debug ? ' · ' + JSON.stringify(e.data.debug) : '')) : null;
+    const msg = serverMsg
+      || (e.data?.detected ? `Saw: ${JSON.stringify(e.data.detected)} — search by name ↓` : null)
+      || e.message
+      || 'Could not identify — search by name ↓';
+    console.error('[identify] error:', e.status, e.data, e.message);
     toast(msg, 'err');
   } finally {
     spin.style.display = 'none';
